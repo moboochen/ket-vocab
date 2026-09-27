@@ -1,0 +1,17 @@
+{
+  "name": "KET單字複習機器人",
+  "short_name": "KET單字",
+  "description": "給台灣小學高年級到國中生的 KET 英文單字複習工具",
+  "lang": "zh-TW",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#fff7fb",
+  "theme_color": "#fff7fb",
+  "icons": [
+    {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
