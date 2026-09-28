@@ -352,6 +352,16 @@ h3.sub{margin:14px 0 6px;font-size:1em;color:#4a3d7a}
   .ghint{display:none}
   .sptiles .t{width:38px;height:46px;font-size:1.35em}
 }
+/* 題庫來源設定列 */
+.qbank{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;background:#fff;border-radius:18px;box-shadow:var(--shadow);padding:8px 14px;margin-top:8px;border:2px dashed #ffd1e3}
+.qbank .qbsel{display:flex;align-items:center;gap:8px;font-weight:800;color:#6b4ab8}
+.qbank select{font:inherit;font-weight:700;color:var(--ink);min-height:44px;border-radius:14px;border:2px solid #e4d8ff;background:#faf7ff;padding:4px 10px;max-width:100%}
+.qbank .qbchk{display:flex;align-items:center;gap:6px;font-weight:700;color:var(--ink2);min-height:44px;cursor:pointer}
+.qbank .qbchk input{width:22px;height:22px;accent-color:#ff6f9f}
+.qbank .qbchk.dim{opacity:.45}
+.qbank .qbinfo{font-size:.85em;color:var(--ink2);flex-basis:100%}
+.qbank .qbnote{color:#c26a00;font-weight:700}
+@media (max-width:640px){ .qbank{padding:8px 10px}.qbank .qbsel{flex-basis:100%}.qbank select{flex:1;min-width:0} }
 </style>
 </head>
 <body>
@@ -1316,10 +1326,10 @@ function lexOK(tags){ const lv = state.level; if (lv === 'h') return true; if (l
 function lexDistractors(entry, pos, rel, rep){
   const mine = new Set(); entry.m.forEach(([, z]) => z.split('').forEach(ch => { if (!ZH_STOP.has(ch) && /[\u4e00-\u9fff]/.test(ch)) mine.add(ch); }));
   (entry.senses || []).forEach(x => x.zh.split('').forEach(ch => { if (!ZH_STOP.has(ch) && /[\u4e00-\u9fff]/.test(ch)) mine.add(ch); }));
-  const out = [];
+  const out = []; const DB = disBank();
   for (const w of shuffle(Object.keys(LEXD).slice())){
     if (out.length >= 30) break;
-    const e = LEXD[w]; if (DICT[w] || rel.has(w) || w === rep || !/^[a-z]{3,}$/.test(w) || !lexOK(e.tags)) continue;
+    const e = LEXD[w]; if (DICT[w] || rel.has(w) || w === rep || !/^[a-z]{3,}$/.test(w) || !(DB ? DB.has(w) : lexOK(e.tags))) continue;
     const ss = lexSenses(w); if (!ss.length || posKey(ss[0].pos) !== pos) continue;
     if (ss.some(x => x.zh.split('').some(ch => mine.has(ch)))) continue;   // 中文意思有重疊就不用，避免「其實也對」的選項
     out.push({w, m: [[ss[0].pos, ss[0].zh]], ex: {}});
@@ -1337,10 +1347,17 @@ function shortZh(z){ return String(z).split(/[；;]/)[0].replace(/（[^）]*）/
 // 為某個字、某個詞形找 n 個「意思不同、詞性與詞形相同」的干擾選項
 function distractors(entry, ft, form, avoid, n){
   const pos = posOf(entry); const rel = relatedSet(entry); avoid = (avoid || []).map(x => x.toLowerCase());
-  const pool = shuffle([...VOCAB.filter(o => o.w !== entry.w && posOf(o) === pos && !rel.has(o.w) && !avoid.includes(o.w)), ...lexDistractors(entry, pos, rel, avoid[0])]);
+  const DB = disBank();
+  const pool = shuffle([...VOCAB.filter(o => o.w !== entry.w && posOf(o) === pos && !rel.has(o.w) && !avoid.includes(o.w) && (!DB || DB.has(o.w))), ...lexDistractors(entry, pos, rel, avoid[0])]);
   const out = [];
   for (const o of pool){ const f = ft ? inflect(o.w, ft) : o.w; if (!f || f === String(form).toLowerCase() || out.includes(f) || avoid.includes(f)) continue; out.push(f); if (out.length === n) break; }
   return out.length === n ? out : null;
+}
+// 詞性太少見（代名詞、連接詞…）找不到同詞性干擾選項時：從題庫隨便挑幾個有中文意思的字
+function anyDistractors(w, n){
+  const src = bankWords(effBank() === 'mine' ? 'ket' : effBank()); const out = [];
+  for (let t = 0; t < 200 && out.length < n; t++){ const c = src[Math.floor(Math.random() * src.length)]; if (c && c !== w && c.length >= 3 && !out.includes(c)) out.push(c); }
+  return out;
 }
 const capLike = (ref, w) => (ref && ref[0] !== ref[0].toLowerCase()) ? w[0].toUpperCase() + w.slice(1) : w;
 const LET = 'ABC';
@@ -1388,7 +1405,7 @@ function qSyn(e){
 }
 function defQ(w, defHTML, zhDef, entry, pos){
   const e = entry || {w, m: [[pos || 'n.', zhDef || '']], ex: {}};
-  const dis = distractors(e, null, w, [], 2) || [];
+  const dis = distractors(e, null, w, [], 2) || anyDistractors(w, 2);
   const {opts, ans} = mkOpts(w, dis);
   return {type: 'def', w, opts, ans, input: true, say: w,
     lead: zhDef && !defHTML ? `📖 哪一個英文字的意思是「<b>${esc(zhDef)}<\/b>」？（第一個字母已經給你了）` : '📖 讀英文解釋，寫出這個單字（第一個字母已經給你了）：',
@@ -1451,7 +1468,7 @@ async function fallbackQ(w, type){
   const ss = lexSenses(w); const zh = ss.length ? ss[0].zh : glossOf(w); const pos = ss.length ? ss[0].pos : 'n.';
   const fake = {w, m: [[pos, zh]], ex: {}, senses: ss};
   let dd = CACHE[w] && CACHE[w].v === 3 ? CACHE[w] : null;
-  if (!dd && (type === 'cloze' || type === 'def')){ try{ dd = await onlineLookup(w); }catch(e){} }
+  if (!dd && HIST.items[w] && (type === 'cloze' || type === 'def')){ try{ dd = await onlineLookup(w); }catch(e){} }   // 題庫裡沒查過的字只用現有資料，不上網
   if (type === 'cloze'){
     const aic = AIC[w + '|' + state.level];
     const sents = [...(aic ? Object.values(aic.ex).flat().filter(s => /\[[^\]]+\]/.test(s.en)).map(s => ({en: s.en.replace(/[\[\]]/g, ''), zh: s.zh})) : []),
@@ -1475,6 +1492,72 @@ async function fallbackQ(w, type){
 
 /* ---- 出題 ---- */
 function quizPool(){ return Object.values(HIST.items).filter(it => DICT[it.w] || LEXD[it.w] || AIC[it.w + '|' + state.level] || (CACHE[it.w] && CACHE[it.w].v === 3)); }
+
+/* ---- 題庫來源：KET／國中 2000／高中 3000／高中 6000／只考查過的字 ---- */
+const QBANKS = {
+  ket: {name: 'KET 劍橋 A2 單字', test: (w, t) => t.includes('K') || KET.has(w)},
+  jh: {name: '國中 2000 字（教育部）', test: (w, t) => t.includes('J')},
+  hs3: {name: '高中 3000 字（大考中心 1–3 級）', test: (w, t) => /[1-3]/.test(t)},
+  hs6: {name: '高中 6000 字（大考中心 1–6 級）', test: (w, t) => /[1-6]/.test(t), note: '第 5–6 級字庫尚未加入，目前先用 1–4 級'},
+  mine: {name: '只考我查過的字'}
+};
+const QB = {bank: LS.get('vocabQBank', 'ket'), boost: LS.get('vocabQBoost', true) !== false, words: {}, sets: {}};
+if (!QBANKS[QB.bank]) QB.bank = 'ket';
+function bankWords(k){
+  if (!QBANKS[k] || k === 'mine') return [];
+  if (QB.words[k]) return QB.words[k];
+  const out = [], seen = new Set();
+  for (const w of [...Object.keys(LEXD), ...Object.keys(DICT)]){
+    if (seen.has(w)) continue; seen.add(w);
+    if (!/^[a-z]{2,}$/.test(w)) continue;
+    if (!QBANKS[k].test(w, (LEXD[w] || {}).tags || '')) continue;
+    if (!DICT[w] && !lexSenses(w).some(x => x.zh)) continue;   // 一定要有中文意思才能出題
+    out.push(w);
+  }
+  QB.sets[k] = new Set(out); return QB.words[k] = out;
+}
+function bankSet(k){ bankWords(k); return QB.sets[k] || null; }
+function lookedWords(){ return quizPool().filter(x => /^[a-z]{2,}$/.test(x.w)); }
+// 實際使用的題庫（「只考我查過的字」但查不到 4 個字時，用 KET 字補）
+function effBank(){ return QB.bank === 'mine' && lookedWords().length < 4 ? 'ket' : QB.bank; }
+// 干擾選項：同一個題庫（只考查過的字時沿用原本的等級規則）
+function disBank(){ const k = effBank(); return k === 'mine' ? null : bankSet(k); }
+function setBank(bank, boost){ if (bank && QBANKS[bank]){ QB.bank = bank; LS.set('vocabQBank', bank); } if (boost != null){ QB.boost = !!boost; LS.set('vocabQBoost', QB.boost); } }
+const QRKEY = 'vocabQRecent_v1'; let QRECENT = LS.get(QRKEY, []); if (!Array.isArray(QRECENT)) QRECENT = [];
+function qRemember(ws){ ws = ws.filter(Boolean); QRECENT = QRECENT.filter(x => !ws.includes(x)).concat(ws).slice(-80); LS.set(QRKEY, QRECENT); }
+const lookWeight = x => 1 + (x.stars || 0) * 2 + ((QS.miss[x.w] || 0) * 1.5);
+// 抽 n 個不重複的字：勾「查過的字多出幾次」→ 約 40% 是查過的字（星星多、答錯多的更常出現，題庫外查過的字也算），其餘是題庫裡還沒查過的字；
+// 沒勾 → 整個題庫平均抽。最近出過的字先避開一陣子。
+function bankSample(n, o){
+  o = o || {}; const bank = o.bank || QB.bank; const boost = o.boost != null ? !!o.boost : QB.boost;
+  const looked = lookedWords(); const lookSet = new Set(looked.map(x => x.w));
+  const recent = o.recent || QRECENT; const used = new Set(o.avoid || []);
+  let fresh, pLook, note = '', eff = bank, allowRepeat = false;
+  if (bank === 'mine' && looked.length >= 4){ fresh = []; pLook = 1; allowRepeat = true; }
+  else if (bank === 'mine'){ eff = 'ket'; fresh = bankWords('ket').filter(w => !lookSet.has(w)); pLook = looked.length ? .5 : 0;
+    note = looked.length ? `你查過 ${looked.length} 個字，還不到 4 個，先加上 KET 單字一起出題 ✨` : '還沒有查過的字，先用 KET 單字出題 ✨'; }
+  else if (boost){ fresh = bankWords(bank).filter(w => !lookSet.has(w)); pLook = looked.length ? .4 : 0; }
+  else { fresh = bankWords(bank); pLook = 0; }
+  const recentOf = size => new Set(recent.slice(-Math.min(40, Math.floor(size / 2))));
+  const recL = recentOf(looked.length), recF = recentOf(fresh.length);
+  const out = []; let guard = 0;
+  while (out.length < n && guard++ < n * 60){
+    let w = null;
+    if (looked.length && (Math.random() < pLook || !fresh.length)){
+      let cand = looked.filter(x => !used.has(x.w) && !recL.has(x.w));
+      if (!cand.length) cand = looked.filter(x => !used.has(x.w));
+      if (!cand.length && allowRepeat) cand = looked.filter(x => x.w !== out[out.length - 1]);
+      if (!cand.length){ if (!fresh.length) break; continue; }
+      w = weightedPick(cand, lookWeight).w;
+    } else if (fresh.length){
+      for (let t = 0; t < 60; t++){ const c = fresh[Math.floor(Math.random() * fresh.length)]; if (used.has(c)) continue; w = c; if (!recF.has(c)) break; }
+      if (!w) continue;
+    } else break;
+    used.add(w); out.push(w);
+  }
+  return {words: out, note, bank: eff, looked: lookSet};
+}
+
 async function buildQuestion(w, want, useAI){
   const e = DICT[w]; const types = want && want !== 'all' ? [want] : shuffle(Object.keys(QTYPES));
   if (e){ for (const t of types){ const q = CUR_MAKERS[t](e); if (q) return q; } for (const t of shuffle(Object.keys(QTYPES))){ const q = CUR_MAKERS[t](e); if (q) return Object.assign(q, {swapped: true}); } return null; }
@@ -1491,21 +1574,19 @@ async function buildQuestion(w, want, useAI){
 async function newQuestion(forceType, forceWord, useAI){
   stopGame(); if (state.game !== 'ket'){ state.game = 'ket'; }
   const view = $('#quizView'); const gen = ++QUIZ.gen;
-  let pool = quizPool(); let demo = false;
-  if (!pool.length){ demo = true; pool = ['happy','asleep','borrow','early','friend','delicious','remember','dangerous'].map(w => ({w, stars: 0})); }
   const want = forceType || state.qType; QUIZ.want = want;
   let qn = null; const tried = new Set();
   for (let i = 0; i < 10 && !qn; i++){
-    const it = forceWord ? {w: forceWord} : weightedPick(pool, x => 1 + (x.stars || 0) * 2 + ((QS.miss[x.w] || 0) * 1.5));
-    if (tried.has(it.w) && !forceWord) continue; tried.add(it.w);
-    qn = await buildQuestion(it.w, want, useAI); if (gen !== QUIZ.gen) return;
+    const w = forceWord || bankSample(1, {avoid: [...tried]}).words[0]; if (!w) break;
+    if (tried.has(w) && !forceWord) continue; tried.add(w);
+    try{ qn = await buildQuestion(w, want, useAI); }catch(err){ console.warn(err); qn = null; } if (gen !== QUIZ.gen) return;
     if (forceWord) break;
   }
-  if (!qn){ view.innerHTML = gamePickerHTML() + '<div class="card empty">暫時出不了題目，再查幾個字試試！<\/div>'; return; }
-  QUIZ.cur = qn; QUIZ.answered = false;
+  if (!qn){ view.innerHTML = gamePickerHTML() + '<div class="card empty">暫時出不了題目，換個題庫試試！<\/div>'; return; }
+  QUIZ.cur = qn; QUIZ.answered = false; qRemember([qn.w]);
   const T = QTYPES[qn.type];
   view.innerHTML = gamePickerHTML() + `<div class="card quizcard" data-qtype="${qn.type}">
-    <h2><span class="ic" style="background:var(--purple2)">🎯<\/span>小測驗 <small style="color:var(--ink2);font-weight:600;font-size:.75em">${demo ? '（示範題：查過的字越多，題目越專屬你！）' : '（從你查過的字出題，星星多的字比較常出現）'}<\/small><\/h2>
+    <h2><span class="ic" style="background:var(--purple2)">🎯<\/span>小測驗 <small style="color:var(--ink2);font-weight:600;font-size:.75em">（題庫：${esc(QBANKS[effBank()].name)}）<\/small><\/h2>
     <div class="qtypes" role="radiogroup" aria-label="題型">${[['all', '🎲', '隨機']].concat(Object.entries(QTYPES).map(([k, v]) => [k, v[0], v[1]])).map(([k, ic, name]) => `<button role="radio" aria-checked="${state.qType === k}" class="${state.qType === k ? 'on' : ''}" data-qt="${k}">${ic} ${name}<\/button>`).join('')}<\/div>
     <div class="score"><span>✅ 答對 ${QS.right}<\/span><span>❌ 答錯 ${QS.wrong}<\/span><span class="qtag">${T[0]} ${T[2]}${qn.ai ? '・✨ AI 出題' : ''}<\/span><\/div>
     ${qn.swapped ? `<div class="note">這個字還沒有「${QTYPES[state.qType] ? QTYPES[state.qType][1] : ''}」的題目，先換成「${T[1]}」。${qn.needAI ? '（想要這種題型，可以按下面的「✨ AI 出題」）' : ''}<\/div>` : ''}
@@ -1549,18 +1630,34 @@ setLevel(state.level);
 setMode('type');
 renderHistory();
 renderWelcome();
-window.__vocab = {newQuestion, syllables, hyphenate, speakSlow, QAIC: () => QAIC, AI, AIC: () => AIC, normAI, geminiSchema, AI_SCHEMA, wordForms, lemmaCands, formType, inflect, DICT, HIST: () => HIST, recordLookup};
+window.__vocab = {newQuestion, bankSample, bankWords, syllables, hyphenate, speakSlow, QAIC: () => QAIC, AI, AIC: () => AIC, normAI, geminiSchema, AI_SCHEMA, wordForms, lemmaCands, formType, inflect, DICT, HIST: () => HIST, recordLookup};
 
-/* ========== 🎮 單字小遊戲：英文填字／忍者射飛鏢／恐龍吃字（用查過的字出題） ========== */
+/* ========== 🎮 單字小遊戲：英文填字／忍者射飛鏢／恐龍吃字（從選好的題庫出題） ========== */
 var G = null, G_LAST = null;
 const GAMES = {ket: ['🎯', 'KET 題型'], spell: ['✍️', '英文填字'], ninja: ['🥷', '忍者射飛鏢'], dino: ['🦖', '恐龍吃字']};
 state.game = LS.get('vocabGame', 'ket'); if (!GAMES[state.game]) state.game = 'ket';
 const G_ROUNDS = 8;
-const G_DEMO = ['happy', 'asleep', 'borrow', 'early', 'friend', 'delicious', 'remember', 'dangerous'];
 const G_FONT = '"Avenir Next","Nunito","Segoe UI",system-ui,-apple-system,sans-serif';
 function gamePickerHTML(){
-  return `<div class="gpick" role="tablist" aria-label="選擇遊戲">${Object.entries(GAMES).map(([k, [ic, n]]) => `<button role="tab" aria-selected="${state.game === k}" class="${state.game === k ? 'on' : ''}" data-game="${k}"><span class="gic">${ic}<\/span><span class="gnm">${n}<\/span><\/button>`).join('')}<\/div>`;
+  return `<div class="gpick" role="tablist" aria-label="選擇遊戲">${Object.entries(GAMES).map(([k, [ic, n]]) => `<button role="tab" aria-selected="${state.game === k}" class="${state.game === k ? 'on' : ''}" data-game="${k}"><span class="gic">${ic}<\/span><span class="gnm">${n}<\/span><\/button>`).join('')}<\/div>` + bankBarHTML();
 }
+/* ---- 題庫來源設定（存在 localStorage） ---- */
+function bankBarHTML(){
+  const mine = QB.bank === 'mine'; const nLooked = lookedWords().length;
+  const n = mine ? nLooked : bankWords(QB.bank).length;
+  const note = QBANKS[QB.bank].note || (mine && nLooked < 4 ? (nLooked ? `查過的字還不到 4 個，先加上 KET 單字一起出題` : '還沒有查過的字，先用 KET 單字出題') : '');
+  return `<div class="qbank" id="qbBar">
+    <label class="qbsel"><span class="qbl">📚 題庫來源<\/span><select id="qbSel" data-qb="bank" aria-label="題庫來源">${Object.entries(QBANKS).map(([k, b]) => `<option value="${k}"${k === QB.bank ? ' selected' : ''}>${esc(b.name)}<\/option>`).join('')}<\/select><\/label>
+    <label class="qbchk${mine ? ' dim' : ''}"><input type="checkbox" id="qbBoost" data-qb="boost"${QB.boost ? ' checked' : ''}${mine ? ' disabled' : ''}><span>查過的字多出幾次<\/span><\/label>
+    <div class="qbinfo">共 <b>${n.toLocaleString()}<\/b> 個字${note ? `<span class="qbnote">・${esc(note)}<\/span>` : ''}<\/div>
+  <\/div>`;
+}
+$('#quizView').addEventListener('change', e => {
+  const t = e.target.closest('[data-qb]'); if (!t) return;
+  if (t.dataset.qb === 'bank') setBank(t.value); else setBank(null, t.checked);
+  openQuiz();
+  const sel = $('#' + t.id); if (sel) try{ sel.focus({preventScroll: true}); }catch(_){}
+});
 function pickGame(k){ if (!GAMES[k]) return; state.game = k; LS.set('vocabGame', k); gUnlockAudio(); openQuiz(); }
 function openQuiz(){ stopGame(); if (state.game === 'ket') newQuestion(); else startGame(state.game); }
 $('#quizView').addEventListener('click', e => { const b = e.target.closest('[data-game]'); if (b) pickGame(b.dataset.game); });
@@ -1600,7 +1697,7 @@ function gSentences(w){
   return out;
 }
 function gFiller(ans, n, avoid){
-  const L = ans.length; return shuffle(VOCAB.map(o => o.w).filter(x => x !== ans && !avoid.includes(x) && /^[a-z]+$/.test(x) && Math.abs(x.length - L) <= 3)).slice(0, n);
+  const DB = disBank(); const L = ans.length; return shuffle((DB ? [...DB] : VOCAB.map(o => o.w)).filter(x => x !== ans && !avoid.includes(x) && /^[a-z]+$/.test(x) && Math.abs(x.length - L) <= 3)).slice(0, n);
 }
 function gItem(w, nOpts, wantCloze){
   const e = DICT[w]; const ss = lexSenses(w); const pos = e ? e.m[0][0] : (ss[0] ? ss[0].pos : 'n.');
@@ -1617,23 +1714,17 @@ function gItem(w, nOpts, wantCloze){
   return it.opts.length === nOpts ? it : null;
 }
 function gDeck(n, nOpts){
-  let pool = quizPool().filter(x => /^[a-z]{2,}$/.test(x.w)); const looked = pool.length; let note = '';
-  if (looked < 4){
-    const have = new Set(pool.map(x => x.w));
-    const add = shuffle(G_DEMO.filter(w => !have.has(w) && DICT[w])).concat(shuffle(VOCAB.map(o => o.w).filter(w => !have.has(w) && !G_DEMO.includes(w) && /^[a-z]+$/.test(w)))).slice(0, 8 - looked);
-    pool = pool.concat(add.map(w => ({w, stars: 0, builtin: true})));
-    note = looked ? `你查過 ${looked} 個字，還不到 4 個，先加上幾個內建單字一起玩！多查幾個字，遊戲就會變成你的專屬題目 ✨` : '還沒有查過單字喔！先用內建單字玩玩看，查過的字越多，遊戲就越專屬你 ✨';
-  }
-  const wf = x => (x.builtin ? .6 : 1) + (x.stars || 0) * 2 + ((QS.miss[x.w] || 0) * 1.5);
-  const items = []; let bag = []; let guard = 0;
-  while (items.length < n && guard++ < n * 5){
-    if (!bag.length) bag = pool.slice();
-    const x = weightedPick(bag, wf); bag.splice(bag.indexOf(x), 1);
-    if (items.length && items[items.length - 1].w === x.w) continue;
-    let it = null; try{ it = gItem(x.w, nOpts, Math.random() < .5); }catch(err){ console.warn(err); }
+  // 從題庫抽字（一回合 8 題不重複、最近出過的字先避開）；做不出題目的字就換下一個
+  const {words} = bankSample(n + 12);   // 「查過的字不到 4 個」之類的提示已經顯示在題庫設定列
+  const items = [];
+  for (const w of words){
+    if (items.length >= n) break;
+    if (items.length && items[items.length - 1].w === w) continue;
+    let it = null; try{ it = gItem(w, nOpts, Math.random() < .5); }catch(err){ console.warn(err); }
     if (it) items.push(it);
   }
-  return {items, note};
+  qRemember(items.map(x => x.w));
+  return {items, note: ''};
 }
 function gPromptHTML(it, spell){
   if (it.mode === 'cloze'){
@@ -1651,7 +1742,7 @@ function startGame(kind){
   const narrow = view.clientWidth < 620;
   const nOpts = kind === 'spell' ? 0 : (narrow ? 3 : 4);
   const {items, note} = gDeck(G_ROUNDS, nOpts);
-  if (!items.length){ view.innerHTML = gamePickerHTML() + '<div class="card empty">暫時出不了題目，再查幾個字試試！<\/div>'; return; }
+  if (!items.length){ view.innerHTML = gamePickerHTML() + '<div class="card empty">暫時出不了題目，換個題庫試試！<\/div>'; return; }
   const [ic, name] = GAMES[kind];
   G = {kind, items, i: 0, score: 0, right: 0, results: [], timers: [], t: 0, parts: [], floats: [], note, W: 0, H: 0, freeze: false, speedMul: 1, paused: false};
   if (kind !== 'spell') view.classList.add('gaming');
@@ -2116,7 +2207,17 @@ window.__game = {
   freeze(on){ if (G) G.freeze = on !== false; },
   speed(m){ if (G) G.speedMul = m; },
   aimAt(k){ const g = G; if (!g || !g.targets) return; const t = k == null ? g.targets.find(x => x.ok) : g.targets[k]; const ge = ninjaGeom(); g.angle = Math.atan2(t.x - ge.lx, (ge.ly - 12) - t.y); return g.angle; },
-  last: () => G_LAST
+  last: () => G_LAST,
+  items: () => G ? G.items.map(it => ({w: it.w, answer: it.answer, mode: it.mode, zh: it.zh, opts: it.opts})) : []
+};
+window.__bank = {
+  get: () => ({bank: QB.bank, boost: QB.boost, eff: effBank()}),
+  set: (bank, boost) => { setBank(bank, boost); if (state.view === 'quiz') openQuiz(); return {bank: QB.bank, boost: QB.boost}; },
+  sizes: () => Object.fromEntries(Object.keys(QBANKS).map(k => [k, k === 'mine' ? lookedWords().length : bankWords(k).length])),
+  has: (k, w) => { const s = bankSet(k); return !!(s && s.has(w)); },
+  // 不記錄「最近出過」的純抽樣（給測試看權重）
+  sample: (n, o) => bankSample(n, Object.assign({recent: []}, o || {})).words,
+  recent: () => QRECENT.slice()
 };
 </script>
 </body>
