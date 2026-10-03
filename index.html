@@ -1774,7 +1774,7 @@ function gSetTime(n){ if (TIMES.includes(n)){ GS.time = n; LS.set('vocabGTime', 
 function gSetDens(k){ if (k >= 0 && k <= 2){ GS.dens = k | 0; LS.set('vocabGDens', GS.dens); } }
 function gSetBankN(n){ if (BANKNS.includes(n)){ GS.bankN = n; LS.set('vocabGBankN', n); } }
 function gSetSpeed(k){ if (k >= 0 && k <= 4){ GS.speed = k | 0; LS.set('vocabGSpeed', GS.speed); } }
-const GTIMED = {dino: 1};   // 限時的遊戲（忍者之後也會加進來）
+const GTIMED = {dino: 1, ninja: 1};   // 限時的遊戲
 function gSettingsHTML(){
   if (state.game === 'ket') return '';
   const sp = state.game === 'ninja' || state.game === 'dino', tm = !!GTIMED[state.game];
@@ -1788,12 +1788,6 @@ function gSettingsHTML(){
 }
 /* ---- 連擊（combo）與黃金：答對連續 2 題起，每題 +5，之後慢慢加到最多 +10；黃金題答對，基本分和連擊分都 ×2 ---- */
 function comboBonus(c){ return c >= 2 ? Math.min(10, 5 + (c - 2)) : 0; }
-// 每 10 題保證至少一題黃金；其他題有 8% 機率也是黃金；沒有黃金的題有 25% 會放一個「黃金誘餌」（黃金但是答錯的選項）
-function gAssignGold(items){
-  items.forEach(it => { it.gold = false; it.decoy = false; });
-  for (let b = 0; b < items.length; b += 10){ const end = Math.min(items.length, b + 10); items[b + Math.floor(Math.random() * (end - b))].gold = true; }
-  items.forEach(it => { if (!it.gold){ if (Math.random() < .08) it.gold = true; else if (Math.random() < .25) it.decoy = true; } });
-}
 const G_FONT = '"Avenir Next","Nunito","Segoe UI",system-ui,-apple-system,sans-serif';
 function gamePickerHTML(){
   return `<div class="gpick" role="tablist" aria-label="選擇遊戲">${Object.entries(GAMES).map(([k, [ic, n]]) => `<button role="tab" aria-selected="${state.game === k}" class="${state.game === k ? 'on' : ''}" data-game="${k}"><span class="gic">${ic}<\/span><span class="gnm">${n}<\/span><\/button>`).join('')}<\/div>` + bankBarHTML() + gSettingsHTML();
@@ -1881,9 +1875,9 @@ function gItem(w, nOpts, wantCloze){
   it.opts = shuffle([it.answer, ...dis.filter(x => x !== it.answer).slice(0, nOpts - 1)]);
   return it.opts.length === nOpts ? it : null;
 }
-function gDeck(n, nOpts){
+function gDeck(n, nOpts, top){
   // 從題庫抽字（一回合 8 題不重複、最近出過的字先避開）；做不出題目的字就換下一個
-  const {words} = bankSample(n + 12);   // 「查過的字不到 4 個」之類的提示已經顯示在題庫設定列
+  const {words} = bankSample(n + 12, top ? {top} : undefined);   // 「查過的字不到 4 個」之類的提示已經顯示在題庫設定列
   const items = [];
   for (const w of words){
     if (items.length >= n) break;
@@ -1891,7 +1885,7 @@ function gDeck(n, nOpts){
     let it = null; try{ it = gItem(w, nOpts, Math.random() < .5); }catch(err){ console.warn(err); }
     if (it) items.push(it);
   }
-  qRemember(items.map(x => x.w)); gAssignGold(items);
+  qRemember(items.map(x => x.w));
   return {items, note: ''};
 }
 function gPromptHTML(it, spell){
@@ -1909,10 +1903,10 @@ function startGame(kind){
   const view = $('#quizView');
   const narrow = view.clientWidth < 620;
   const nOpts = kind === 'spell' ? 0 : (narrow ? 3 : 4);
-  const deck = kind === 'dino' ? dinoDeck() : gDeck(GS.count, nOpts); const {items, note} = deck;
+  const deck = kind === 'dino' ? dinoDeck() : gDeck(kind === 'ninja' ? 24 : GS.count, nOpts, kind === 'ninja' ? GS.bankN : 0); const {items, note} = deck;
   if (!items.length && kind !== 'dino'){ view.innerHTML = gamePickerHTML() + '<div class="card empty">暫時出不了題目，換個題庫試試！<\/div>'; return; }
   const [ic, name] = GAMES[kind];
-  G = {kind, items, i: 0, score: 0, right: 0, combo: 0, maxCombo: 0, bd: {base: 0, combo: 0, gold: 0, bonus: 0, bonusHits: 0, pen: 0, golds: 0, goldHits: 0, goldTotal: items.filter(x => x.gold).length}, spd: gSpd(), rounds: deck.rounds || null, timed: !!GTIMED[kind], limit: GS.time, left: GS.time, results: [], timers: [], t: 0, parts: [], floats: [], note, W: 0, H: 0, freeze: false, speedMul: 1, paused: false};
+  G = {kind, items, i: 0, score: 0, right: 0, combo: 0, maxCombo: 0, bd: {base: 0, combo: 0, gold: 0, bonus: 0, bonusHits: 0, pen: 0}, spd: gSpd(), nOpts, rounds: deck.rounds || null, timed: !!GTIMED[kind], limit: GS.time, left: GS.time, results: [], timers: [], t: 0, parts: [], floats: [], note, W: 0, H: 0, freeze: false, speedMul: 1, paused: false};
   if (kind !== 'spell') view.classList.add('gaming');
   view.innerHTML = gamePickerHTML() + `<div class="card gcard" data-gkind="${kind}">
     <div class="ghead"><div class="gtitle"><span class="ic">${ic}<\/span>${name}<\/div>
@@ -1927,33 +1921,33 @@ function startGame(kind){
   if (kind === 'spell') spellInit(); else if (kind === 'ninja') ninjaInit(); else dinoInit();
   G.card.scrollIntoView({block: 'start'});
 }
-function gHud(){ if (!G) return; const r = $('#gRound'), s = $('#gScore'); if (r) r.textContent = G.kind === 'dino' ? dinoRoundText() : `第 ${Math.min(G.i + 1, G.items.length)}／${G.items.length} 題`; if (s) s.textContent = `⭐ ${fmtN(G.score)} 分`;
+function gHud(){ if (!G) return; const r = $('#gRound'), s = $('#gScore'); if (r) r.textContent = G.kind === 'dino' ? dinoRoundText() : (G.timed ? `第 ${G.i + 1} 題` : `第 ${Math.min(G.i + 1, G.items.length)}／${G.items.length} 題`); if (s) s.textContent = `⭐ ${fmtN(G.score)} 分`;
   const cb = $('#gCombo'); if (cb){ const on = G.combo >= 2; cb.classList.toggle('show', on); const t = on ? `🔥 x${G.combo}` : ''; if (cb.textContent !== t){ cb.textContent = t; if (on){ cb.classList.remove('bump'); void cb.offsetWidth; cb.classList.add('bump'); } } } }
 function gMsg(html, cls){ const m = $('#gMsg'); if (!m) return; m.innerHTML = html || ''; m.className = 'gmsg' + (html ? ' show ' + (cls || '') : ''); }
 function gAfter(sec, fn){ if (G) G.timers.push({at: G.t + sec, fn, g: G}); }
 
+
+const fmtN = n => String(Math.round(n * 10) / 10);
 function gAward(pts, gold, mult){   // 答對：連擊 +1、算分（加分時間：基本分和連擊分 ×1.5～2.0）
-  const m = mult || 1; const r = {base: pts, bonus: 0, gold: !!gold, extra: 0, total: 0, combo: 0, mult: m, bx: 0};
+  const m = mult || 1; const r = {base: pts, bonus: 0, extra: 0, total: 0, combo: 0, mult: m, bx: 0};
   G.combo++; G.maxCombo = Math.max(G.maxCombo, G.combo); r.combo = G.combo;
-  r.bonus = comboBonus(G.combo); r.extra = gold ? r.base + r.bonus : 0;
-  const raw = r.base + r.bonus + r.extra; r.total = m > 1 ? Math.round(raw * m * 10) / 10 : raw; r.bx = Math.round((r.total - raw) * 10) / 10;
-  G.score = Math.round((G.score + r.total) * 10) / 10; G.right++; const b = G.bd; b.base += r.base; b.combo += r.bonus; b.gold += r.extra; if (gold){ b.golds++; b.goldHits++; } if (m > 1){ b.bonus = Math.round((b.bonus + r.bx) * 10) / 10; b.bonusHits++; }
+  r.bonus = comboBonus(G.combo); const raw = r.base + r.bonus; r.total = m > 1 ? Math.round(raw * m * 10) / 10 : raw; r.bx = Math.round((r.total - raw) * 10) / 10;
+  G.score = Math.round((G.score + r.total) * 10) / 10; G.right++; const b = G.bd; b.base += r.base; b.combo += r.bonus; if (m > 1){ b.bonus = Math.round((b.bonus + r.bx) * 10) / 10; b.bonusHits++; }
   return r;
 }
-const fmtN = n => String(Math.round(n * 10) / 10);
-function gResult(ok, picked, pts, gold){
+function gResult(ok, picked, pts, gold, mult){
   const it = G.items[G.i]; let r = {base: 0, bonus: 0, gold: false, extra: 0, total: 0, combo: 0};
-  if (ok){ r = gAward(pts, gold); QS.right++; } else { G.combo = 0; QS.wrong++; QS.miss[it.w] = (QS.miss[it.w] || 0) + 1; }
+  if (ok){ r = gAward(pts, gold, mult); QS.right++; } else { G.combo = 0; QS.wrong++; QS.miss[it.w] = (QS.miss[it.w] || 0) + 1; }
   LS.set(QKEY, QS);
-  G.results.push({w: it.w, answer: it.answer, zh: it.zh, ok, picked, pts: r.total, gold: !!it.gold});
-  blip(ok ? (r.gold ? 'win' : 'good') : 'bad'); gSay(it.answer); gHud(); return r;
+  G.results.push({w: it.w, answer: it.answer, zh: it.zh, ok, picked, pts: r.total});
+  blip(ok ? (r.mult > 1 ? 'win' : 'good') : 'bad'); gSay(it.answer); gHud(); return r;
 }
-function gNext(){ if (!G) return; G.i++; if (G.i >= G.items.length) return gEnd(); G.newRound(); }
+function gNext(){ if (!G) return; G.i++; if (G.timed && G.i >= G.items.length - 4){ const more = gDeck(16, G.nOpts, G.kind === 'ninja' ? GS.bankN : 0).items; G.items.push(...more); } if (G.i >= G.items.length) return gEnd(); G.newRound(); }
 
 function gEnd(){
   const g = G; const dn = g.kind === 'dino'; const tm = g.timed; const st = g.stats || {};
-  const r = g.right, n = dn ? Math.max(1, st.ok + st.bad + st.zap) : g.items.length;
-  const stars = dn ? ((r / n >= .85 && r >= g.limit / 8) ? 3 : (r / n >= .6 && r >= g.limit / 15) ? 2 : 1) : (r / n >= .85 ? 3 : r / n >= .5 ? 2 : 1);
+  const r = g.right, n = dn ? Math.max(1, st.ok + st.bad + st.zap) : tm ? Math.max(1, g.results.length) : g.items.length;
+  const stars = dn ? ((r / n >= .85 && r >= g.limit / 8) ? 3 : (r / n >= .6 && r >= g.limit / 15) ? 2 : 1) : tm ? ((r / n >= .8 && r >= g.limit / 10) ? 3 : (r / n >= .5 && r >= g.limit / 20) ? 2 : 1) : (r / n >= .85 ? 3 : r / n >= .5 ? 2 : 1);
   const kind = g.kind; stopGame(); G_LAST = {kind, score: g.score, right: r, n, stars, bd: g.bd, maxCombo: g.maxCombo, limit: g.limit, bonusCount: g.bonusTotal || 0, bonusDone: g.bonusDone || 0, stats: st, rounds: g.rounds ? g.rounds.map(rd => ({target: rd.target, mode: rd.mode, eaten: rd.eaten})) : null};
   const cheer = stars === 3 ? '太厲害了！你是單字大師 🏆' : stars === 2 ? '很棒喔！再玩一次會更好 🌈' : '有進步就很棒！多玩幾次一定會記住 🍀';
   const view = $('#quizView');
@@ -1965,7 +1959,7 @@ function gEnd(){
       <div class="gbdr"><span>🎯 答對基本分<\/span><b>${g.bd.base}<\/b><\/div>
       <div class="gbdr"><span>🔥 連擊加分（最高連擊 x${g.maxCombo}）<\/span><b>+${g.bd.combo}<\/b><\/div>
       ${g.bd.pen ? `<div class="gbdr pen"><span>🙅 吃到相反的字扣分<\/span><b>-${g.bd.pen}<\/b><\/div>` : ''}
-      ${tm ? `<div class="gbdr gold"><span>☄️ 加分時間加成（${g.bonusDone || 0} 次加分時間・命中 ${g.bd.bonusHits} 個）<\/span><b>+${fmtN(g.bd.bonus)}<\/b><\/div>` : `<div class="gbdr gold"><span>✨ 黃金加倍（命中 ${g.bd.goldHits}／${g.bd.goldTotal} 個黃金）<\/span><b>+${g.bd.gold}<\/b><\/div>`}
+      ${tm ? `<div class="gbdr gold"><span>☄️ 加分時間加成（${g.bonusDone || 0} 次加分時間・命中 ${g.bd.bonusHits} 個）<\/span><b>+${fmtN(g.bd.bonus)}<\/b><\/div>` : ''}
       <div class="gbdr total"><span>⭐ 總分<\/span><b>${fmtN(g.score)}<\/b><\/div><\/div>
     ${dn ? dinoResultsHTML(g) : ''}<ul class="gres">${dn ? '' : g.results.map(x => `<li class="${x.ok ? 'ok' : 'no'}"><span>${x.ok ? '✅' : '💡'}<\/span><button class="en" data-look="${esc(x.w)}" data-nocount>${esc(x.answer)}<\/button><span class="zh">${esc(x.zh)}<\/span>${!x.ok && x.picked ? `<small>（你選了 <span class="en">${esc(x.picked)}<\/span>）<\/small>` : ''}<button class="btn sm" data-say="${esc(x.answer)}" aria-label="發音">🔊<\/button><\/li>`).join('')}<\/ul>
     <div class="gendbtns"><button class="btn primary" id="gAgain">🔁 再玩一次<\/button><button class="btn purple" id="gOther">🎮 換個遊戲<\/button><\/div>
@@ -2045,7 +2039,7 @@ function gComboBadge(c){ const g = G; if (!g || g.combo < 2) return; const k = M
 function rrect(c, x, y, w, h, r){ r = Math.min(r, w / 2, h / 2); c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
 function fitFont(c, text, maxW, size, min){ let s = size; do { c.font = `800 ${s}px ${G_FONT}`; if (c.measureText(text).width <= maxW) break; s -= 1; } while (s > (min || 11)); return s; }
 function wrongMsg(it, picked){ const pz = glossOf(picked); return `<div class="gm1">🙂 差一點點！<\/div><div>這是 <b class="en">${esc(picked)}<\/b>${pz ? `（${esc(pz)}）` : ''}<\/div><div>正確答案是 <b class="en ok">${esc(it.answer)}<\/b>（${esc(it.zh)}）<\/div>`; }
-function goodMsg(r){ return `<div class="gm1">${r.gold ? '✨ 黃金命中！' : GOOD[Math.floor(Math.random() * GOOD.length)]}<\/div><div>+${r.total} 分${r.bonus || r.gold ? `<small class="gmsub">（基本 ${r.base}${r.bonus ? ` ＋ 🔥連擊 ${r.bonus}` : ''}${r.gold ? ` ＋ ✨黃金加倍 ${r.extra}` : ''}）<\/small>` : ''}<\/div>${r.combo >= 2 ? `<div class="gmcombo">🔥 連擊 x${r.combo}<\/div>` : ''}`; }
+function goodMsg(r){ return `<div class="gm1">${r.mult > 1 ? '☄️ 加分命中 x' + r.mult.toFixed(1) + '！' : GOOD[Math.floor(Math.random() * GOOD.length)]}<\/div><div>+${fmtN(r.total)} 分${r.bonus || r.mult > 1 ? `<small class="gmsub">（基本 ${r.base}${r.bonus ? ` ＋ 🔥連擊 ${r.bonus}` : ''}${r.mult > 1 ? ` ＋ ☄️加成 ${fmtN(r.bx)}` : ''}）<\/small>` : ''}<\/div>${r.combo >= 2 ? `<div class="gmcombo">🔥 連擊 x${r.combo}<\/div>` : ''}`; }
 
 /* ==================== ✍️ 英文填字 ==================== */
 function spellInit(){ G.newRound = spellRound; spellRound(); }
@@ -2106,7 +2100,7 @@ function gSpellConfetti(){ const box = $('#spTiles'); if (!box) return; box.clas
 
 /* ==================== 🥷 忍者射飛鏢（遊樂園射擊攤位） ==================== */
 function ninjaInit(){
-  const g = G; Object.assign(g, {angle: 0, charge: 0, charging: false, rot: 0, shots: [], targets: [], lock: false, phase: 0});
+  const g = G; Object.assign(g, {angle: 0, charge: 0, charging: false, rot: 0, shots: [], targets: [], lock: false, phase: 0, belt: [], bdir: -1, bv: 0, bflip: 9 + Math.random() * 4, boff: 0, nextGap: 0, stats: {ok: 0, bad: 0}}); bonusInit(g);
   $('#gCtrl').innerHTML = `<button class="gbtn dir" id="gL" aria-label="向左轉"><b>◀<\/b><small>左轉<\/small><\/button>
     <button class="gbtn fire" id="gFire" aria-label="按住蓄力，放開射出飛鏢"><span class="gfill"><\/span><span class="glbl"><b>✴️ 按住蓄力<\/b><small>放開就射出去！<\/small><\/span><\/button>
     <button class="gbtn dir" id="gR" aria-label="向右轉"><b>▶<\/b><small>右轉<\/small><\/button>`;
@@ -2121,7 +2115,7 @@ function ninjaInit(){
   g.cv.addEventListener('pointermove', e => { if (g.aiming === e.pointerId) aim(e); });
   const end = e => { if (g.aiming === e.pointerId) g.aiming = null; };
   g.cv.addEventListener('pointerup', end); g.cv.addEventListener('pointercancel', end);
-  ninjaRound(); gRun();
+  ninjaRound(); ninjaBeltFill(); gRun();
 }
 function ninjaKey(e, down){
   const g = G; const k = e.key;
@@ -2129,18 +2123,52 @@ function ninjaKey(e, down){
   if (k === ' ' || k === 'ArrowUp' || k === 'Enter'){ if (e.repeat) return true; down ? ninjaCharge() : ninjaRelease(); return true; }
   return false;
 }
-function ninjaGeom(){ const {W, H} = G; const r = Math.max(24, Math.min(42, W * .06, H * .075)); const valH = Math.max(34, H * .1); return {r, valH, rowY: [H * .31, H * .55], lx: W / 2, ly: H - Math.max(34, H * .075), cy: H - Math.max(58, H * .15), amp: W * (G.targets.length === 3 ? .15 : .075)}; }
+
+function ninjaGeom(){ const {W, H} = G; const r = Math.max(24, Math.min(42, W * .06, H * .075)); const valH = Math.max(34, H * .1); return {r, valH, rowY: [H * .215, H * .43, H * .645], lx: W / 2, ly: H - Math.max(34, H * .075), cy: H - Math.max(58, H * .15), amp: W * (G.targets.length === 3 ? .15 : .1)}; }
+
 function ninjaRound(){
   const g = G, it = g.items[g.i]; g.lock = false; g.shots = []; g.charging = false; g.charge = 0;
   $('#gPrompt').innerHTML = gPromptHTML(it); gHud(); gMsg('');
+  g.old = (g.old || []).concat((g.targets || []).filter(t => t.dead));   // 被打中的靶繼續下沉，不會突然消失
   const n = it.opts.length;
-  const slots = n >= 4 ? [[.17, 1, 0], [.83, 1, 0], [.37, 0, 1], [.63, 0, 1]] : [[.2, 1, 0], [.8, 1, 0], [.5, 0, 1]];
+  const slots = n >= 4 ? [[.17, 2], [.83, 2], [.37, 1], [.63, 1]] : [[.2, 2], [.8, 2], [.5, 1]];   // 第 1 排是最上面的輸送帶；第 2、3 排的靶全部都會左右移動
   const order = shuffle(it.opts.slice(0, slots.length));
-  const decoyK = it.decoy ? order.findIndex(w => w !== it.answer) : -1; const fast = GS.speed >= 3;
-  g.targets = order.map((w, k) => ({w, ok: w === it.answer, gold: (w === it.answer && it.gold) || k === decoyK, kind: Math.floor(Math.random() * 4), face: null, sink: 0, hitT: 0, fx: slots[k][0], row: slots[k][1], move: slots[k][2] || (fast ? 1 : 0), dir: slots[k][2] ? 1 : -1, ph: k * 1.7, x: 0, y: 0, shake: 0, pop: 0, glow: 0, dead: false}));
-  g.phase = Math.random() * 6; ninjaPlace();
+  g.targets = order.map((w, k) => ({w, ok: w === it.answer, kind: Math.floor(Math.random() * 4), face: null, sink: 0, hitT: 0, fx: slots[k][0], row: slots[k][1], move: 1, dir: k % 2 ? 1 : -1, ph: k * 1.7, x: 0, y: 0, shake: 0, pop: 0, glow: 0, dead: false}));
+  g.phase = Math.random() * 6; ninjaPlace(); if (g.belt) ninjaRelabel();
 }
-function ninjaPlace(){ const g = G, ge = ninjaGeom(); g.targets.forEach(t => { t.x = g.W * t.fx + (t.move ? ge.amp * Math.sin((g.mt || 0) * t.dir + (t.dir < 0 ? t.ph : 0)) : 0); t.y = ge.rowY[t.row]; }); }
+
+function ninjaPlace(){ const g = G, ge = ninjaGeom(); g.targets.forEach(t => { t.x = g.W * t.fx + (t.move ? ge.amp * Math.sin((g.mt || 0) * t.dir + (t.dir < 0 ? t.ph : 0)) : 0); t.y = ge.rowY[t.row]; }); g.belt.forEach(t => { t.y = ge.rowY[0]; }); }
+const ninjaAll = () => G.targets.concat(G.belt);
+// ---- 最上面一排：遊樂園輸送帶，字牌小盜賊一直從一邊跑進來；過一陣子就換方向 ----
+function ninjaBeltWord(g, ok){
+  const it = g.items[g.i]; if (ok) return it.answer;
+  if (!it._wp) it._wp = [...new Set(it.opts.filter(w => w !== it.answer).concat(gFiller(it.answer, 10, it.opts)))];
+  const recent = new Set(g.belt.slice(-4).map(t => t.w)); const L = it._wp.filter(w => !recent.has(w)); return (L.length ? L : it._wp)[Math.floor(Math.random() * (L.length || it._wp.length))];
+}
+function ninjaBeltOkCap(g){ return g.bonus ? 2 : 1; }
+function ninjaBeltAdd(g, ge, x, forceOk){
+  const nOk = g.belt.filter(t => !t.dead && t.ok && t.x > -ge.r && t.x < g.W + ge.r).length;
+  const ok = !!forceOk || (nOk < ninjaBeltOkCap(g) && Math.random() < (g.bonus ? .55 : .4));
+  g.belt.push({w: ninjaBeltWord(g, ok), ok, kind: Math.floor(Math.random() * 4), face: null, sink: 0, hitT: 0, x, y: ge.rowY[0], row: 0, ph: Math.random() * 6, shake: 0, pop: 0, glow: 0, dead: false, belt: true});
+}
+function ninjaBeltSpacing(ge){ return (ge.r * 3.1 + 34) * (G.bonus ? .66 : 1); }
+function ninjaBeltFill(){ const g = G, ge = ninjaGeom(); const sp = ninjaBeltSpacing(ge); g.belt = []; for (let x = sp * .5; x < g.W; x += sp * (1 + Math.random() * .3)) ninjaBeltAdd(g, ge, x); ninjaRelabel(); g.nextGap = sp; }
+function ninjaRelabel(){   // 換題時：輸送帶上的字牌換成新題的字（正確答案只有 1 個，加分時間最多 2 個）
+  const g = G; const live = g.belt.filter(t => !t.dead);
+  const vis = live.filter(t => t.x > 20 && t.x < g.W - 20).sort(() => Math.random() - .5);
+  const pool = vis.length ? vis : live; const okSet = new Set(pool.slice(0, ninjaBeltOkCap(g)));
+  live.forEach(t => { t.ok = okSet.has(t); t.w = ninjaBeltWord(g, t.ok); });
+}
+function ninjaBeltUpdate(g, dt, ge){
+  const spd = Math.max(g.W * .14, 110) * g.spd * (g.bonus ? 2 : 1);
+  g.bflip -= dt; if (g.bflip <= 0){ g.bdir *= -1; g.bflip = 8 + Math.random() * 5; gFloat(g.W / 2, ge.rowY[0] + ge.r * 1.5, g.bdir < 0 ? '◀◀ 換方向：往左跑' : '換方向：往右跑 ▶▶', '#fff'); }
+  g.bv += (g.bdir * spd - g.bv) * Math.min(1, dt * 2.2); g.boff += g.bv * dt;
+  g.belt.forEach(t => { if (!t.dead) t.x += g.bv * dt; });
+  g.belt = g.belt.filter(t => !(t.dead && t.hitT > 1.7) && t.x > -ge.r * 4 && t.x < g.W + ge.r * 4);
+  const entry = g.bdir < 0 ? g.W + ge.r * 2 : -ge.r * 2; const alive = g.belt.filter(t => !t.dead);
+  const near = alive.reduce((m, t) => Math.min(m, Math.abs(t.x - entry)), 1e9);
+  if (near >= g.nextGap){ const vis = alive.filter(t => t.x > 0 && t.x < g.W); ninjaBeltAdd(g, ge, entry, vis.length >= 3 && !vis.some(t => t.ok)); g.nextGap = ninjaBeltSpacing(ge) * (1 + Math.random() * .35); }
+}
 function ninjaCharge(){ const g = G; if (!g || g.lock || g.charging) return; if (g.shots.some(s => s.state === 'fly')) return; g.charging = true; g.charge = 0; gMsg(''); }
 function ninjaRange(c){ const ge = ninjaGeom(); return c * (ge.ly - 10) * 1.12; }
 function ninjaRelease(){
@@ -2151,20 +2179,22 @@ function ninjaRelease(){
   blip('throw');
 }
 function ninjaHitT(t, x, y, ge){ if (t.dead) return false; const dx = x - t.x, dy = y - t.y; if (dx * dx + dy * dy < (ge.r * 1.08) ** 2) return true; const lw = t.lw || ge.r * 2.4, lh = t.lh || 26; return Math.abs(x - t.x) < lw / 2 + 4 && y > t.y + ge.r * .45 && y < t.y + ge.r * .45 + lh + 4; }
+
 function ninjaUpdate(dt){
   const g = G, ge = ninjaGeom();
   if (g.rot) g.angle = Math.max(-1.2, Math.min(1.2, g.angle + g.rot * 1.0 * dt));
   if (g.charging) g.charge = Math.min(1, g.charge + dt / 1.1);
   const fb = $('#gFire'); if (fb) fb.style.setProperty('--p', g.charge.toFixed(3));
-  if (!g.freeze) g.mt = (g.mt || 0) + dt * .85 * g.spd;
+  if (!g.freeze){ g.left = Math.max(0, g.left - dt); bonusTick(g, dt); g.mt = (g.mt || 0) + dt * .85 * g.spd * (g.bonus ? 2 : 1); ninjaBeltUpdate(g, dt, ge); }
   ninjaPlace();
-  g.targets.forEach(t => { t.shake = Math.max(0, t.shake - dt * 1.6); t.glow = Math.max(0, t.glow - dt * .25); if (t.dead){ t.hitT += dt; t.sink = Math.max(0, Math.min(1, (t.hitT - .55) / .8)); } });
+  g.old = (g.old || []).filter(t => t.hitT < 1.8); g.old.forEach(t => { t.hitT += dt; t.shake = Math.max(0, t.shake - dt * 1.6); t.sink = Math.max(0, Math.min(1, (t.hitT - .55) / .8)); });
+  ninjaAll().forEach(t => { t.shake = Math.max(0, t.shake - dt * 1.6); t.glow = Math.max(0, t.glow - dt * .25); if (t.dead){ t.hitT += dt; t.sink = Math.max(0, Math.min(1, (t.hitT - .55) / .8)); } });
   for (const s of g.shots){
     if (s.state === 'fly'){
       const steps = Math.max(1, Math.ceil(s.v * dt / 6));
       for (let k = 0; k < steps && s.state === 'fly'; k++){
         const h = dt / steps; s.x += Math.sin(s.a) * s.v * h; s.y -= Math.cos(s.a) * s.v * h; s.v -= s.dec * h; s.spin += 22 * h;
-        const t = g.lock ? null : g.targets.find(t => ninjaHitT(t, s.x, s.y, ge));
+        const t = g.lock ? null : ninjaAll().find(t => ninjaHitT(t, s.x, s.y, ge));
         if (t){ s.state = 'gone'; ninjaHit(t); break; }
         if (s.x < -20 || s.x > g.W + 20 || s.y < -20){ s.state = 'gone'; if (!g.lock){ gMsg('😮 沒射中！轉一轉方向再試一次 🎯', 'info'); gAfter(1.6, () => { if (!g.lock) gMsg(''); }); } break; }
         if (s.v <= 0){ s.state = 'fall'; s.vy = 0; if (!g.lock){ blip('short'); gMsg('💨 力量不夠，飛鏢掉下去了！<br>按久一點再放開 💪', 'info'); gAfter(1.8, () => { if (!g.lock) gMsg(''); }); } }
@@ -2172,12 +2202,15 @@ function ninjaUpdate(dt){
     } else if (s.state === 'fall'){ s.vy += 700 * dt; s.y += s.vy * dt; s.spin += 6 * dt; s.alpha -= dt * 1.4; if (s.alpha <= 0) s.state = 'gone'; }
   }
   g.shots = g.shots.filter(s => s.state !== 'gone');
+  const cl = $('#gClock'); if (cl){ const n = Math.ceil(g.left - 1e-6); const red = g.left <= 10; if (cl.textContent !== String(n)) cl.textContent = n; cl.classList.toggle('red', red); }
+  if (g.left <= 0) return gEnd();
 }
 function ninjaHit(t){
   const g = G, it = g.items[g.i]; g.lock = true; t.dead = true; t.hitT = 0; t.sink = 0; t.face = g.forceFace != null ? g.forceFace : Math.floor(Math.random() * 4); t.shake = .8;   // 4 種被打中的表情隨機出現
-  if (t.ok){ const r = gResult(true, t.w, 10, t.gold); gBurst(t.x, t.y, r.gold ? 90 : 46, true); gFloat(t.x, t.y - 40, '+' + r.total, r.gold ? '#e69500' : null); if (r.combo >= 2) gFloat(t.x, t.y - 76, '🔥 x' + r.combo, '#ff6a00'); gMsg(goodMsg(r), 'good'); gAfter(1.9, gNext); }
-  else { const c = g.targets.find(x => x.ok); if (c) c.glow = 1; gBurst(t.x, t.y, 8); gResult(false, t.w, 0); gMsg(wrongMsg(it, t.w), 'bad'); gAfter(3, gNext); }
+  if (t.ok){ const mult = g.bonus ? bonusMult() : 1; const r = gResult(true, t.w, 10, false, mult); g.stats.ok++; if (mult > 1) g.bmults.push(mult); gBurst(t.x, t.y, mult > 1 ? 80 : 46, true); gFloat(t.x, t.y - 40, '+' + fmtN(r.total), mult > 1 ? '#8a4bff' : null); if (mult > 1) gFloat(t.x, t.y - 74, 'x' + mult.toFixed(1) + '!', '#8a4bff'); if (r.combo >= 2) gFloat(t.x, t.y - (mult > 1 ? 108 : 76), '🔥 x' + r.combo, '#ff6a00'); gMsg(goodMsg(r), 'good'); gAfter(.9, ninjaAdvance); }
+  else { const c = g.targets.find(x => x.ok && !x.dead) || g.belt.find(x => x.ok && !x.dead); if (c) c.glow = 1; g.stats.bad++; gBurst(t.x, t.y, 8); gResult(false, t.w, 0); gMsg(wrongMsg(it, t.w), 'bad'); gAfter(1.5, ninjaAdvance); }
 }
+function ninjaAdvance(){ if (G) gNext(); }
 /* ---------- 江戶街景背景（畫在離屏 canvas，只有尺寸改變才重畫）---------- */
 function rnd01(seed){ const x = Math.sin(seed * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }
 function edoLantern(c, x, y, s, glow){   // 紅燈籠（x,y 是掛繩的位置）
@@ -2212,14 +2245,14 @@ function edoMachiya(c, x, w, roofTop, eaveY, floorY, baseY, seed){
   c.fillStyle = '#6b7498'; [x + w * .07, x + w * .93].forEach(ox => { c.beginPath(); c.arc(ox, roofTop - 3, 5, 0, 7); c.fill(); });   // 鬼瓦
   c.fillStyle = '#242a45'; c.fillRect(x - ov, eaveY + 3, w + ov * 2, 5);   // 屋簷陰影
 }
-function ninjaBGDraw(c, W, H, ge){
-  // 黃昏天空
-  let gr = c.createLinearGradient(0, 0, 0, H * .55); [[0, '#2b2a6b'], [.38, '#7b4f9f'], [.68, '#e8709a'], [.88, '#ffae78'], [1, '#ffd9a0']].forEach(([p, col]) => gr.addColorStop(p, col)); c.fillStyle = gr; c.fillRect(0, 0, W, H);
+function ninjaBGDraw(c, W, H, ge, night){
+  // 黃昏天空（加分時間：夜空）
+  let gr = c.createLinearGradient(0, 0, 0, H * .55); (night ? [[0, '#050a30'], [.45, '#1b1f6b'], [.8, '#3b3180'], [1, '#5a3f9a']] : [[0, '#2b2a6b'], [.38, '#7b4f9f'], [.68, '#e8709a'], [.88, '#ffae78'], [1, '#ffd9a0']]).forEach(([p, col]) => gr.addColorStop(p, col)); c.fillStyle = gr; c.fillRect(0, 0, W, H);
   for (let k = 0; k < 26; k++){ c.globalAlpha = .35 + rnd01(k + 3) * .5; c.fillStyle = '#fff'; c.beginPath(); c.arc(rnd01(k) * W, rnd01(k + 50) * H * .22, .8 + rnd01(k + 9) * 1.2, 0, 7); c.fill(); } c.globalAlpha = 1;
   // 月牙
   const mx = W * .86, my = H * .1, mr = Math.min(22, W * .035); c.fillStyle = '#fff6cf'; c.beginPath(); c.arc(mx, my, mr, 0, 7); c.fill(); c.fillStyle = '#5a3f8f'; c.beginPath(); c.arc(mx + mr * .45, my - mr * .1, mr * .9, 0, 7); c.fill();
   // 晚霞雲
-  [[.12, .17, 1], [.55, .13, .8], [.78, .22, 1.1], [.35, .26, .7]].forEach(([fx, fy, sc]) => { c.fillStyle = 'rgba(255,170,190,.55)'; const x = fx * W, y = fy * H, u = 16 * sc; c.beginPath(); c.ellipse(x, y, u * 3, u * .55, 0, 0, 7); c.ellipse(x + u, y - u * .4, u * 1.6, u * .5, 0, 0, 7); c.fill(); });
+  if (!night) [[.12, .17, 1], [.55, .13, .8], [.78, .22, 1.1], [.35, .26, .7]].forEach(([fx, fy, sc]) => { c.fillStyle = 'rgba(255,170,190,.55)'; const x = fx * W, y = fy * H, u = 16 * sc; c.beginPath(); c.ellipse(x, y, u * 3, u * .55, 0, 0, 7); c.ellipse(x + u, y - u * .4, u * 1.6, u * .5, 0, 0, 7); c.fill(); });
   // 富士山（遠方）
   const hz = H * .36, fx = W * .3, fw = Math.min(W * .5, 330), fh = H * .27; c.fillStyle = '#7a62ab'; c.beginPath(); c.moveTo(fx - fw / 2, hz); c.quadraticCurveTo(fx - fw * .16, hz - fh * .78, fx - fw * .045, hz - fh); c.lineTo(fx + fw * .045, hz - fh); c.quadraticCurveTo(fx + fw * .16, hz - fh * .78, fx + fw / 2, hz); c.closePath(); c.fill();
   c.fillStyle = '#f4eefc'; c.beginPath(); c.moveTo(fx - fw * .045, hz - fh); c.lineTo(fx + fw * .045, hz - fh); c.quadraticCurveTo(fx + fw * .075, hz - fh * .86, fx + fw * .11, hz - fh * .72); for (let k = 0; k < 5; k++) c.lineTo(fx + fw * (.09 - k * .045), hz - fh * (.76 + (k % 2) * .06)); c.lineTo(fx - fw * .11, hz - fh * .72); c.quadraticCurveTo(fx - fw * .075, hz - fh * .86, fx - fw * .045, hz - fh); c.fill();
@@ -2234,25 +2267,30 @@ function ninjaBGDraw(c, W, H, ge){
     ty -= hh + 8 * cs; });
   c.fillStyle = '#ffcf5a'; c.beginPath(); c.arc(cx - 15 * cs, ty + 4 * cs, 2.5 * cs, 0, 7); c.arc(cx + 15 * cs, ty + 4 * cs, 2.5 * cs, 0, 7); c.fill();
   // 兩排町屋
-  const n = Math.max(3, Math.round(W / 170)), hw = W / n, floorY = ge.rowY[1] + ge.r * 1.25 + 24 - 6, eaveY0 = ge.rowY[0] - ge.r * 1.15;
-  for (let k = 0; k < n; k++){ const jit = rnd01(k + 7); edoMachiya(c, k * hw, hw, H * (.17 + .05 * jit), eaveY0 - 2 + jit * 6, ge.rowY[0] + ge.r * 1.25 + 22 + 8, ge.cy + 2, k); }
+  const n = Math.max(3, Math.round(W / 170)), hw = W / n, floorY = ge.rowY[2] + ge.r * 1.25 + 24 - 6, eaveY0 = ge.rowY[1] - ge.r * 1.15;
+  for (let k = 0; k < n; k++){ const jit = rnd01(k + 7); edoMachiya(c, k * hw, hw, H * (.1 + .05 * jit), eaveY0 - 2 + jit * 6, ge.rowY[1] + ge.r * 1.25 + 22 + 8, ge.cy + 2, k); }
   // 欄杆（兩層的架子）：二樓陽台欄杆、一樓店前木板
-  [0, 1].forEach(row => { const y = ge.rowY[row] + ge.r * 1.25 + (row ? 24 : 22); c.fillStyle = '#5b3624'; c.fillRect(W * .02, y + 10, W * .96, 18); c.fillStyle = 'rgba(0,0,0,.2)'; for (let x = W * .02 + 6; x < W * .98; x += 14) c.fillRect(x, y + 10, 4, 18);
-    c.fillStyle = row ? '#c98b4f' : '#b3452d'; rrect(c, W * .015, y, W * .97, 11, 5); c.fill(); c.fillStyle = 'rgba(255,255,255,.28)'; c.fillRect(W * .015 + 5, y + 2, W * .97 - 10, 3); });
+  [0, 1, 2].forEach(row => { const y = ge.rowY[row] + ge.r * 1.25 + (row === 2 ? 24 : 22); c.fillStyle = '#5b3624'; c.fillRect(W * .02, y + 10, W * .96, 18); c.fillStyle = 'rgba(0,0,0,.2)'; for (let x = W * .02 + 6; x < W * .98; x += 14) c.fillRect(x, y + 10, 4, 18);
+    c.fillStyle = row === 2 ? '#c98b4f' : row === 1 ? '#b3452d' : '#4a4468'; rrect(c, W * .015, y, W * .97, 11, 5); c.fill(); c.fillStyle = 'rgba(255,255,255,.28)'; c.fillRect(W * .015 + 5, y + 2, W * .97 - 10, 3); });
   // 前景木板地
   const cy = ge.cy; gr = c.createLinearGradient(0, cy, 0, H); gr.addColorStop(0, '#9c6334'); gr.addColorStop(1, '#6e4222'); c.fillStyle = gr; c.fillRect(0, cy, W, H - cy);
   c.fillStyle = '#c98b4f'; c.fillRect(0, cy, W, 6); c.strokeStyle = 'rgba(50,25,10,.35)'; c.lineWidth = 2; for (let x = 0; x < W; x += 54){ c.beginPath(); c.moveTo(x, cy + 6); c.lineTo(x - 10, H); c.stroke(); }
   c.fillStyle = 'rgba(255,255,255,.22)'; for (let k = 0; k < W / 70; k++){ c.beginPath(); c.arc(28 + k * 70, cy + (H - cy) * .5 + 6, 3, 0, 7); c.fill(); }
+  if (night){ c.fillStyle = 'rgba(8,8,64,.34)'; c.fillRect(0, 0, W, H); }
 }
-function ninjaBG(){
-  const g = G, W = g.W, H = g.H, ge = ninjaGeom(); const key = W + 'x' + H + 'x' + g.cv.width;
-  if (g.bgKey === key && g.bg) return g.bg;
+
+function ninjaBG(night){
+  const g = G, W = g.W, H = g.H, ge = ninjaGeom(); const key = W + 'x' + H + 'x' + g.cv.width; const f = night ? 'bgN' : 'bg';
+  if (g.bgKey === key && g[f]) return g[f];
+  if (g.bgKey !== key){ g.bg = g.bgN = null; g.bgKey = key; }
   const bg = document.createElement('canvas'); bg.width = g.cv.width; bg.height = g.cv.height; const c = bg.getContext('2d'); const k = g.cv.width / W; c.setTransform(k, 0, 0, k, 0, 0);
-  ninjaBGDraw(c, W, H, ge); g.bg = bg; g.bgKey = key; return bg;
+  ninjaBGDraw(c, W, H, ge, night); g[f] = bg; return bg;
 }
 function ninjaDraw(){
   const g = G, c = g.cx, W = g.W, H = g.H, ge = ninjaGeom();
-  c.drawImage(ninjaBG(), 0, 0, W, H);
+  c.drawImage(ninjaBG(false), 0, 0, W, H);
+  if (g.bn > .01){ c.globalAlpha = Math.min(1, g.bn); c.drawImage(ninjaBG(true), 0, 0, W, H); c.globalAlpha = 1; bonusMeteors(c, g); }
+  ninjaBeltRail(c, g, ge);
   // 紅燈籠串（會輕輕搖、發光閃爍）
   const ly = H * .115, sag = Math.min(26, H * .05), N = Math.max(5, Math.round(W / 78)); c.strokeStyle = '#3b2a22'; c.lineWidth = 2; c.beginPath(); c.moveTo(0, ly - sag * .2); c.quadraticCurveTo(W / 2, ly + sag * 1.6, W, ly - sag * .2); c.stroke();
   for (let k = 0; k < N; k++){ const u = (k + .5) / N, x = u * W, y = (ly - sag * .2) * (1 - u) * (1 - u) + 2 * (1 - u) * u * (ly + sag * 1.6) + u * u * (ly - sag * .2); const sw = Math.sin(g.t * 1.7 + k) * 1.8; const fl = .8 + .2 * Math.sin(g.t * 7 + k * 2.3);
@@ -2260,7 +2298,7 @@ function ninjaDraw(){
   // 櫻花花瓣
   c.fillStyle = 'rgba(255,196,214,.9)'; for (let k = 0; k < 9; k++){ const px = ((k * 97 + g.t * (14 + k * 2)) % (W + 40)) - 20, py = ((k * 53 + g.t * (22 + k * 3)) % (H * .8)); c.beginPath(); c.ellipse(px, py, 3.2, 1.8, g.t + k, 0, 7); c.fill(); }
   // 靶（小盜賊／小鬼）
-  g.targets.forEach(t => ninjaTarget(c, t, ge, g));
+  (g.old || []).concat(ninjaAll()).forEach(t => ninjaTarget(c, t, ge, g));
   // 瞄準線
   const R = g.charging ? Math.max(ninjaRange(g.charge), 30) : ge.ly * .55;
   c.save(); c.setLineDash([3, 11]); c.lineDashOffset = -g.t * 30; c.lineCap = 'round'; c.lineWidth = 5; c.strokeStyle = g.charging ? 'rgba(255,90,138,.9)' : 'rgba(255,255,255,.7)';
@@ -2273,6 +2311,7 @@ function ninjaDraw(){
   const bx = ge.lx + 62, bh = Math.min(70, H * .16), by = ge.ly - bh + 14; let gr;
   c.fillStyle = '#fff'; rrect(c, bx - 3, by - 3, 20, bh + 6, 8); c.fill(); c.fillStyle = '#f1e6ff'; rrect(c, bx, by, 14, bh, 6); c.fill();
   if (g.charge > 0){ gr = c.createLinearGradient(0, by + bh, 0, by); gr.addColorStop(0, '#5fd3a8'); gr.addColorStop(.6, '#ffc94d'); gr.addColorStop(1, '#ff5a8a'); c.fillStyle = gr; rrect(c, bx, by + bh * (1 - g.charge), 14, bh * g.charge, 6); c.fill(); }
+  bonusPill(c, g, W);
   // 飛鏢
   g.shots.forEach(s => { c.globalAlpha = Math.max(0, s.alpha); drawShuriken(c, s.x, s.y, 13, s.spin); c.globalAlpha = 1; });
 }
@@ -2329,12 +2368,16 @@ function drawHead(c, x, y, r, kind, face, t, tt){
   drawFace(c, x, y, r, kind, face, t, tt);
   if (kind === 3){ c.fillStyle = K.hat; c.beginPath(); c.moveTo(x - r * 1.35, y - r * .32); c.lineTo(x, y - r * 1.5); c.lineTo(x + r * 1.35, y - r * .32); c.quadraticCurveTo(x, y - r * .5, x - r * 1.35, y - r * .32); c.fill(); c.strokeStyle = '#a8812f'; c.lineWidth = 1.6; c.stroke(); for (let k = -2; k <= 2; k++){ c.beginPath(); c.moveTo(x + k * r * .12, y - r * 1.3 + Math.abs(k) * r * .1); c.lineTo(x + k * r * .5, y - r * .42); c.stroke(); } c.strokeStyle = '#7a1f2a'; c.lineWidth = 2; c.beginPath(); c.moveTo(x - r * .72, y - r * .3); c.lineTo(x - r * .6, y + r * .5); c.moveTo(x + r * .72, y - r * .3); c.lineTo(x + r * .6, y + r * .5); c.stroke(); }
 }
+function ninjaBeltRail(c, g, ge){   // 輸送帶上會移動的箭頭
+  const y = ge.rowY[0] + ge.r * 1.25 + 22; c.save(); c.beginPath(); c.rect(g.W * .015, y, g.W * .97, 11); c.clip(); c.strokeStyle = 'rgba(255,226,122,.9)'; c.lineWidth = 2.5; c.lineCap = 'round'; c.lineJoin = 'round';
+  const step = 22, off = ((g.boff % step) + step) % step, d = g.bdir < 0 ? -1 : 1;
+  for (let x = -step + off; x < g.W + step; x += step){ c.beginPath(); c.moveTo(x - d * 4, y + 2.5); c.lineTo(x + d * 4, y + 5.5); c.lineTo(x - d * 4, y + 8.5); c.stroke(); } c.restore();
+}
 function ninjaTarget(c, t, ge, g){
-  const r = ge.r; const x = t.x + (t.shake ? Math.sin(g.t * 50) * 6 * t.shake : 0); const y = t.y; const ledge = t.y + r * 1.25 + (t.row ? 24 : 22);
+  const r = ge.r; const x = t.x + (t.shake ? Math.sin(g.t * 50) * 6 * t.shake : 0); const y = t.y; const ledge = t.y + r * 1.25 + (t.row === 2 ? 24 : 22);
   c.save(); c.beginPath(); c.rect(0, 0, g.W, ledge + 3); c.clip();   // 被打中後往下沉，沉到欄杆後面就看不到了
   const sink = t.sink || 0; if (sink) c.translate(0, sink * (r * 3.2 + 40));
-  if (t.gold){ const pu = .5 + .5 * Math.sin(g.t * 4); const hg = c.createRadialGradient(x, y + r * .3, r * .4, x, y + r * .3, r * (1.9 + .2 * pu)); hg.addColorStop(0, 'rgba(255,214,64,.9)'); hg.addColorStop(1, 'rgba(255,214,64,0)'); c.fillStyle = hg; c.beginPath(); c.arc(x, y + r * .3, r * 2.1, 0, 7); c.fill(); }
-  else if (t.glow > 0){ c.fillStyle = `rgba(95,211,168,${.25 + .35 * Math.abs(Math.sin(g.t * 5))})`; c.beginPath(); c.arc(x, y + r * .3, r * 1.6, 0, 7); c.fill(); }
+  if (t.glow > 0){ c.fillStyle = `rgba(95,211,168,${.25 + .35 * Math.abs(Math.sin(g.t * 5))})`; c.beginPath(); c.arc(x, y + r * .3, r * 1.6, 0, 7); c.fill(); }
   const bob = t.dead ? 0 : Math.sin(g.t * 2.2 + (t.ph || 0)) * 1.5; c.translate(0, bob);
   drawHead(c, x, y, r, t.kind || 0, t.dead ? t.face : null, t, g.t);
   // 字牌（木牌＋繩子），小手抓著
@@ -2342,12 +2385,11 @@ function ninjaTarget(c, t, ge, g){
   const tw = c.measureText(t.w).width; const lw = tw + 22, lh = fs + 12; t.lw = lw; t.lh = lh; const py = y + r * .45;
   c.fillStyle = (NK[(t.kind || 0) % 4]).skin; [-1, 1].forEach(d => { c.beginPath(); c.arc(x + d * (lw / 2 - 2), py + lh * .6, r * .2, 0, 7); c.fill(); c.strokeStyle = 'rgba(0,0,0,.25)'; c.lineWidth = 1; c.stroke(); });
   c.fillStyle = 'rgba(0,0,0,.2)'; rrect(c, x - lw / 2 + 2, py + 3, lw, lh, 7); c.fill();
-  c.fillStyle = t.glow > 0 ? '#c9f3df' : t.gold ? '#ffe680' : '#f6e0b0'; rrect(c, x - lw / 2, py, lw, lh, 7); c.fill();
-  c.strokeStyle = t.glow > 0 ? '#2fb380' : t.gold ? '#e69500' : '#8a5a2b'; c.lineWidth = 2.5; c.stroke();
+  c.fillStyle = t.glow > 0 ? '#c9f3df' : '#f6e0b0'; rrect(c, x - lw / 2, py, lw, lh, 7); c.fill();
+  c.strokeStyle = t.glow > 0 ? '#2fb380' : '#8a5a2b'; c.lineWidth = 2.5; c.stroke();
   c.strokeStyle = 'rgba(138,90,43,.35)'; c.lineWidth = 1; [.33, .66].forEach(k => { c.beginPath(); c.moveTo(x - lw / 2 + 4, py + lh * k); c.lineTo(x + lw / 2 - 4, py + lh * k); c.stroke(); });
   c.fillStyle = '#8a5a2b'; [-1, 1].forEach(d => { c.beginPath(); c.arc(x + d * (lw / 2 - 6), py + 5, 2, 0, 7); c.fill(); });
   c.fillStyle = '#3b2a22'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(t.w, x, py + lh / 2 + 1);
-  if (t.gold) gSparkles(c, x, y + r * .4, r * 1.3, g.t);
   c.restore();
 }
 function drawShuriken(c, x, y, r, rot){
@@ -2408,7 +2450,10 @@ function bonusSkyDraw(c, g, W, H){   // 夜空＋星星＋流星
   const gr = c.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, '#0a0d3a'); gr.addColorStop(.55, '#26237a'); gr.addColorStop(1, '#5d3d9e'); c.fillStyle = gr; c.fillRect(0, 0, W, H);
   for (let k = 0; k < 46; k++){ c.globalAlpha = a * (.35 + .65 * Math.abs(Math.sin(g.t * 2 + k))); c.fillStyle = k % 5 ? '#fff' : '#ffe9a8'; const r = .8 + rnd01(k + 9) * 1.6; c.beginPath(); c.arc(rnd01(k) * W, rnd01(k + 40) * H * .72, r, 0, 7); c.fill(); }
   c.globalAlpha = a; const mx = W * .12, my = H * .14, mr = Math.min(24, W * .04); c.fillStyle = '#fff6cf'; c.beginPath(); c.arc(mx, my, mr, 0, 7); c.fill(); c.fillStyle = '#1a1d5c'; c.beginPath(); c.arc(mx + mr * .5, my - mr * .12, mr * .88, 0, 7); c.fill();
-  c.lineCap = 'round';
+  c.restore(); bonusMeteors(c, g); return;
+}
+function bonusMeteors(c, g){
+  const a = Math.min(1, g.bn); c.save(); c.lineCap = 'round';
   g.meteors.forEach(m => { const n = Math.hypot(m.vx, m.vy), ux = m.vx / n, uy = m.vy / n; const tx = m.x - ux * m.len, ty = m.y - uy * m.len; const lg = c.createLinearGradient(tx, ty, m.x, m.y); lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(1, 'rgba(255,248,200,.95)');
     c.globalAlpha = a; c.strokeStyle = lg; c.lineWidth = m.w; c.beginPath(); c.moveTo(tx, ty); c.lineTo(m.x, m.y); c.stroke(); c.fillStyle = '#fff'; c.beginPath(); c.arc(m.x, m.y, m.w * .9, 0, 7); c.fill(); });
   c.restore();
@@ -2769,10 +2814,10 @@ function drawDino(c, x, gy, s, face, open, mood, t){
 
 /* ---- 測試用小掛勾 ---- */
 window.__game = {
-  get(){ const g = G; if (!g) return {kind: null, last: G_LAST}; const it = g.items[g.i] || {}; return {kind: g.kind, t: g.t, i: g.i, n: g.items.length, score: g.score, right: g.right, answer: it.answer, w: it.w, mode: it.mode, opts: it.opts, angle: g.angle, charge: g.charge, charging: !!g.charging, lock: !!g.lock, paused: !!g.paused, reveal: g.reveal, dx: g.dx, vx: g.vx, wall: g.wall, geo: g.kind === 'dino' ? dinoGeom() : null, targets: (g.targets || []).map(t => ({w: t.w, ok: t.ok, x: t.x, y: t.y, face: t.face, sink: t.sink, dead: !!t.dead, kind: t.kind, gold: !!t.gold})), shots: (g.shots || []).length, W: g.W, H: g.H, combo: g.combo, maxCombo: g.maxCombo, spd: g.spd, bd: g.bd, gold: !!it.gold, decoy: !!it.decoy, words: (g.words || []).map(w => ({w: w.w, y: w.y, x: w.x, bw: w.bw, ok: w.ok, gold: !!w.gold, rel: w.rel, good: w.good, bad: w.bad, state: w.state})), bonusOn: !!g.bonus, bn: g.bn, bonusDone: g.bonusDone, bonusTotal: g.bonusTotal, bmults: g.bmults, bplan: g.bplan, meteors: (g.meteors || []).length, floats: (g.floats || []).map(f => f.text), zap: g.zap, phase: g.rd && g.rd.phase, rt: g.rd && g.rd.t, left: g.left, limit: g.limit, timed: !!g.timed, bonus: !!g.bonus, waves: g.waves, rwin: g.rd && g.rd.win, ate: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].ate,  ri: g.ri, nr: g.rounds && g.rounds.length, target: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].target, dmode: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].mode, mcd: g.mcd, stats: g.stats, goldTargets: (g.targets || g.words || []).filter(t => t.gold).map(t => ({w: t.w, ok: t.ok})), last: G_LAST}; },
+  get(){ const g = G; if (!g) return {kind: null, last: G_LAST}; const it = g.items[g.i] || {}; return {kind: g.kind, t: g.t, i: g.i, n: g.items.length, score: g.score, right: g.right, answer: it.answer, w: it.w, mode: it.mode, opts: it.opts, angle: g.angle, charge: g.charge, charging: !!g.charging, lock: !!g.lock, paused: !!g.paused, reveal: g.reveal, dx: g.dx, vx: g.vx, wall: g.wall, geo: g.kind === 'dino' ? dinoGeom() : null, targets: (g.targets || []).map(t => ({w: t.w, ok: t.ok, x: t.x, y: t.y, face: t.face, sink: t.sink, dead: !!t.dead, kind: t.kind, row: t.row, gold: false})), old: (g.old || []).map(t => ({w: t.w, dead: true, face: t.face, sink: t.sink})), belt: (g.belt || []).map(t => ({w: t.w, ok: t.ok, x: t.x, y: t.y, dead: !!t.dead, face: t.face})), bdir: g.bdir, bv: g.bv, bflip: g.bflip, shots: (g.shots || []).length, W: g.W, H: g.H, combo: g.combo, maxCombo: g.maxCombo, spd: g.spd, bd: g.bd, words: (g.words || []).map(w => ({w: w.w, y: w.y, x: w.x, bw: w.bw, ok: w.ok, gold: !!w.gold, rel: w.rel, good: w.good, bad: w.bad, state: w.state})), bonusOn: !!g.bonus, bn: g.bn, bonusDone: g.bonusDone, bonusTotal: g.bonusTotal, bmults: g.bmults, bplan: g.bplan, meteors: (g.meteors || []).length, floats: (g.floats || []).map(f => f.text), zap: g.zap, phase: g.rd && g.rd.phase, rt: g.rd && g.rd.t, left: g.left, limit: g.limit, timed: !!g.timed, bonus: !!g.bonus, waves: g.waves, rwin: g.rd && g.rd.win, ate: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].ate,  ri: g.ri, nr: g.rounds && g.rounds.length, target: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].target, dmode: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].mode, mcd: g.mcd, stats: g.stats, last: G_LAST}; },
   freeze(on){ if (G) G.freeze = on !== false; },
   speed(m){ if (G) G.speedMul = m; },
-  aimAt(k){ const g = G; if (!g || !g.targets) return; const t = k == null ? g.targets.find(x => x.ok) : g.targets[k]; const ge = ninjaGeom(); g.angle = Math.atan2(t.x - ge.lx, (ge.ly - 12) - t.y); return g.angle; },
+  aimAt(k){ const g = G; if (!g || !g.targets) return; const t = k === 'belt' ? g.belt.find(x => x.ok && !x.dead && x.x > 0 && x.x < g.W) || g.belt.find(x => x.ok) : k == null ? g.targets.find(x => x.ok) : g.targets[k]; if (!t) return; const ge = ninjaGeom(); g.angle = Math.atan2(t.x - ge.lx, (ge.ly - 12) - t.y); return g.angle; },
   hit(ok){ const g = G; if (!g) return false; if (g.kind === 'dino') return dinoForce(ok === false ? 'bad' : 'good'); if (g.lock) return false; if (g.kind === 'ninja'){ const t = g.targets.find(x => x.ok === (ok !== false)); ninjaHit(t); return true; } return false; },
   eat: kind => dinoForce(kind),
   forceFace: n => { if (G) G.forceFace = n; },
@@ -2783,7 +2828,8 @@ window.__game = {
   skipRound: () => dinoSkipRound(),
   endNow: () => { if (G) gEnd(); },
   bonusPlanOf: L => bonusPlan(L),
-  toBonus: () => { const g = G; if (g && g.bplan[g.bidx]) g.left = g.limit - g.bplan[g.bidx].s - .05; },
+  noBonus: on => { const g = G; if (!g) return; if (on !== false){ if (!g._plan) g._plan = g.bplan; g.bplan = []; } else if (g._plan){ g.bplan = g._plan; g._plan = null; } },
+  toBonus: () => { const g = G; if (g && g._plan){ g.bplan = g._plan; g._plan = null; } if (g && g.bplan[g.bidx]) g.left = g.limit - g.bplan[g.bidx].s - .05; },
   setLeft: n => { if (G) G.left = n; },
   sched: (k, dens, o) => dinoSim(k, dens, o || {}),
   dinoRounds: () => G && G.rounds ? G.rounds.map(r => ({target: r.target, mode: r.mode, syn: r.syn, ant: r.ant})) : null,
@@ -2791,8 +2837,8 @@ window.__game = {
   last: () => G_LAST,
   settings: () => ({count: GS.count, speed: GS.speed, time: GS.time, dens: GS.dens, bankN: GS.bankN}),
   bankInfo: n => { const T = topPool(dinoBankKey(), QB.diff, n), T5 = topPool(dinoBankKey(), QB.diff, 500), T1 = topPool(dinoBankKey(), QB.diff, 1000); const sc = T.list.reduce((a, w) => a + wordScore(w), 0) / T.list.length; const tg = dinoPool().filter(x => T.set.has(x.w)).length; return {n: T.n, avg: sc, list: n === 500 ? T.list : [], nested: n === 500 ? T.list.every(w => T1.set.has(w)) : n === 1000 ? T.list.every(w => topPool(dinoBankKey(), QB.diff, 3000).set.has(w)) : true, targets: tg}; },
-  golds: () => G ? G.items.map(it => !!it.gold) : [],
-  items: () => G ? G.items.map(it => ({w: it.w, answer: it.answer, mode: it.mode, zh: it.zh, opts: it.opts, gold: it.gold, decoy: it.decoy, rel: it.rel, round: it.round, zh: it.zh})) : []
+  flipBelt: () => { if (G) G.bflip = 0; },
+  items: () => G ? G.items.map(it => ({w: it.w, answer: it.answer, mode: it.mode, zh: it.zh, opts: it.opts, rel: it.rel, round: it.round, zh: it.zh})) : []
 };
 window.__bank = {
   get: () => ({bank: QB.bank, boost: QB.boost, eff: effBank(), diff: QB.diff}),
