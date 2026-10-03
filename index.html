@@ -2770,7 +2770,7 @@ function dinoInit(){
 function dinoGeomOf(W, H, k, bonus){
   const gy = H - Math.max(26, H * .08); const ds = Math.min(W * (W < 480 ? .17 : .2), H * (H < 420 ? .2 : .27), 128); const mw = Math.max(40, Math.min(96, W * .08));
   const px0 = mw, px1 = W - mw; const vf = dinoFallV(H, k, bonus, 1);
-  return {W, H, gy, ds, dinoW: ds * .9, hw: ds * .32, mw, px0, px1, c0: px0 + ds * .3, c1: px1 - ds * .3, hitTop: gy - ds * 1.02, hitBot: gy - ds * .35, mouthY: gy - ds * .82, fs: Math.round(Math.max(14, Math.min(22, ds * .19))), vmax: dinoVmaxOf(W, k, bonus), vf, tFall: (gy + 44) / vf};
+  return {W, H, gy, ds, dinoW: ds * .9, hw: ds * .32, mw, px0, px1, c0: px0 + ds * .3, c1: px1 - ds * .3, hitTop: gy - ds * 1.02, hitBot: gy - ds * .35, mouthY: gy - ds * .82, fs: Math.round(Math.max(14, Math.min(22, ds * .19))), ih: Math.round(Math.max(46, Math.min(66, ds * .62))), vmax: dinoVmaxOf(W, k, bonus), vf, tFall: (gy + 44) / vf};
 }
 function dinoGeom(){ return dinoGeomOf(G.W, G.H, GS.speed, G.bonus); }
 // 每一級掉落速度都是原本的 3 倍；恐龍最大水平速度也跟著等級變快，每一級都躲得掉
@@ -2779,7 +2779,7 @@ function dinoVmaxOf(W, k, bonus){ return W * .66 * Math.pow(SPEEDS[k][1] / .7, .
 function dinoV(){ return dinoFallV(G.H, GS.speed, G.bonus, G.speedMul); }
 let DINO_MC = null;
 function dinoTextW(text, fs){ DINO_MC = DINO_MC || document.createElement('canvas').getContext('2d'); DINO_MC.font = `800 ${fs}px ${G_FONT}`; return DINO_MC.measureText(text).width; }
-function dinoBwOf(text, ge){ return Math.min(Math.min(ge.W * .36, 190), dinoTextW(text, ge.fs) + 24); }
+function dinoBwOf(text, ge){ return Math.max(ge.ih * .95, Math.min(Math.min(ge.W * .36, 190), dinoTextW(text, ge.fs) + 20)); }
 /* ---- 出字排程（scheduler）：一次掉一「排」字（1～4 個）。
    1) 同一排左右相鄰的字，中心距離至少 = 1.6 × 恐龍寬度 + 字牌寬度（中間一定有讓恐龍通過的縫）。
    2) 從畫面上任何位置出發，恐龍都要在「這一排掉到之前」走得到縫：最遠要走的距離 ≤ 恐龍速度 × (兩排間隔時間 − 通過時間) × 0.7，
@@ -2811,7 +2811,7 @@ function dinoMaxDist(ge, free){   // 站在畫面哪裡都好：離最近的安�
   let m = Math.max(0, free[0][0] - ge.c0, ge.c1 - free[free.length - 1][1]); for (let i = 0; i + 1 < free.length; i++) m = Math.max(m, (free[i + 1][0] - free[i][1]) / 2); return m;
 }
 function dinoReach(ge, tau, vf){   // 這排字掉下來之前，恐龍最多能走多遠
-  const win = (ge.hitBot - ge.hitTop + 44) / vf; const tf = (ge.gy + 44) / vf;
+  const win = (ge.hitBot - ge.hitTop + ge.ih) / vf; const tf = (ge.gy + 44) / vf;
   return Math.min(ge.vmax * .7 * Math.max(0, tau - win), ge.vmax * tf * .5);
 }
 
@@ -2866,7 +2866,7 @@ function dinoWaveTry(){   // 回傳 true = 這一排出去了
   const res = dinoSearch(geN, k0, tauEff, dinoBand(geN, dens, g.bonus) / vW, vW, kk => { const kinds = dinoKinds(kk, inflight, null, g.bonus); const its = dinoPickWords(g, kinds); return its && {its, bws: its.map(it => dinoBwOf(it.w, ge)), wrong: its.map(it => it.rel !== rd.mode)}; });
   if (!res) return false;
   const its = res.c.its, plan = res.plan, bws = res.c.bws; const cols = ['#ffd6e7', '#fff1b8', '#d4f5e4', '#dcecff', '#ece2ff'];
-  its.forEach((it, i) => { g.words.push({w: it.w, zh: it.zh, rel: it.rel, good: it.rel === rd.mode, bad: it.rel !== 'none' && it.rel !== rd.mode, x: plan.xs[i], bw: bws[i], y: -30, col: cols[(g.nwords = (g.nwords || 0) + 1) % cols.length], state: 'fall', a: 1, wob: Math.random() * 6}); rd.shown[it.w] = (rd.shown[it.w] || 0) + 1; g.rounds[rd.r].shown[it.w] = 1; });
+  its.forEach((it, i) => { g.words.push({w: it.w, zh: it.zh, rel: it.rel, good: it.rel === rd.mode, bad: it.rel !== 'none' && it.rel !== rd.mode, x: plan.xs[i], bw: bws[i], y: -30, col: cols[(g.nwords = (g.nwords || 0) + 1) % cols.length], food: dinoFood(), state: 'fall', a: 1, wob: Math.random() * 6}); rd.shown[it.w] = (rd.shown[it.w] || 0) + 1; g.rounds[rd.r].shown[it.w] = 1; });
   g.sch.tau = 0; g.waves = (g.waves || 0) + 1; return true;
 }
 function dinoPrefill(){   // 一開始（或換題後）畫面上就已經有一整串字在往下掉，不用等
@@ -2921,7 +2921,7 @@ function dinoUpdate(dt){
   for (const w of g.words){
     if (w.state === 'fall'){
       if (run) w.y += v * dt;
-      const bh = 40, bottom = w.y + bh / 2, top = w.y - bh / 2; const ox = Math.abs(g.dx - w.x) < ge.hw + w.bw / 2 - 6;
+      const bh = ge.ih, bottom = w.y + bh / 2, top = w.y - bh / 2; const ox = Math.abs(g.dx - w.x) < ge.hw + w.bw / 2 - 6;
       if (ox && bottom > ge.hitTop - 70 && bottom < ge.hitTop + 10) near = true;
       if (ox && bottom >= ge.hitTop && top <= ge.hitBot){ dinoEat(w, w.x); continue; }
       if (top > ge.gy - 6){ w.state = 'fade'; if (w.good) g.stats.miss++; }
@@ -2953,7 +2953,7 @@ function dinoForce(kind){   // 測試用：直接讓恐龍吃到某一種字
   const R = g.rounds[rd.r], ge = dinoGeom();
   let w = g.words.find(x => x.state === 'fall' && (kind === 'good' ? x.good : kind === 'bad' ? x.bad : x.rel === 'none'));
   if (!w){ const src = R.sup[kind === 'good' ? 'good' : kind === 'bad' ? 'bad' : 'none']; if (!src.length) return null; const it = src[Math.floor(Math.random() * src.length)];
-    w = {w: it.w, zh: it.zh, rel: it.rel, good: it.rel === R.mode, bad: it.rel !== 'none' && it.rel !== R.mode, x: g.dx, bw: dinoBwOf(it.w, ge), y: ge.hitTop - 10, col: '#ffd6e7', state: 'fall', a: 1, wob: 0}; g.words.push(w); R.shown[it.w] = 1; }
+    w = {w: it.w, zh: it.zh, rel: it.rel, good: it.rel === R.mode, bad: it.rel !== 'none' && it.rel !== R.mode, x: g.dx, bw: dinoBwOf(it.w, ge), y: ge.hitTop - 10, col: '#ffd6e7', food: dinoFood(), state: 'fall', a: 1, wob: 0}; g.words.push(w); R.shown[it.w] = 1; }
   dinoEat(w, w.x); return {w: w.w};
 }
 function dinoSkipRound(){ const g = G; if (!g || !g.rd) return; g.rd.phase = 'play'; gMsg(''); dinoSwitch(); }
@@ -3003,17 +3003,20 @@ function dinoZap(c, x, y, ds, t, k){   // 電到了：黃色閃電＋光暈＋�
   c.restore();
 }
 
+/* ---- v8：每個掉下來的字都包在一個食物裡：水果（蘋果、香蕉、葡萄、草莓…）或帶骨的肉 🍖。對的字、錯的字、不相關的字用同一組食物（隨機分配），不會洩漏答案 ---- */
+const DFRUITS = ['🍎', '🍌', '🍇', '🍓', '🍊', '🍑', '🍒', '🍉', '🍍', '🍐', '🍋', '🥝'], DMEAT = '🍖';
+const D_EMOJI = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+function dinoFood(){ return Math.random() < .3 ? DMEAT : DFRUITS[Math.floor(Math.random() * DFRUITS.length)]; }
 function dinoWord(c, w, ge, g){
-  const x = w.x + Math.sin(g.t * 1.6 + w.wob) * 3, y = w.y;
-  const fs = fitFont(c, w.w, w.bw - 26, ge.fs, 11);
-  const bw = w.bw, bh = 40 + (fs > 20 ? 4 : 0);
+  const x = w.x + Math.sin(g.t * 1.6 + w.wob) * 3, y = w.y, ih = ge.ih;
+  const fs = fitFont(c, w.w, w.bw - 12, ge.fs, 11);
   c.save(); c.globalAlpha = Math.max(0, Math.min(1, w.a));
-  c.fillStyle = '#7cc56f'; c.beginPath(); c.ellipse(x + 8, y - bh / 2 - 3, 9, 5, -.5, 0, 7); c.fill(); c.strokeStyle = '#6a8f4c'; c.lineWidth = 2; c.beginPath(); c.moveTo(x, y - bh / 2 + 2); c.lineTo(x + 2, y - bh / 2 - 6); c.stroke();
-  c.fillStyle = 'rgba(0,0,0,.08)'; rrect(c, x - bw / 2 + 2, y - bh / 2 + 4, bw, bh, 18); c.fill();
-  c.fillStyle = w.col; rrect(c, x - bw / 2, y - bh / 2, bw, bh, 18); c.fill();
-  c.strokeStyle = '#fff'; c.lineWidth = 3; c.stroke();
-  c.fillStyle = 'rgba(255,255,255,.7)'; c.beginPath(); c.ellipse(x - bw / 2 + 12, y - bh / 2 + 9, 5, 3, -.5, 0, 7); c.fill();
-  c.font = `800 ${fs}px ${G_FONT}`; c.fillStyle = '#3b3350'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(w.w, x, y + 1);
+  c.fillStyle = 'rgba(0,0,0,.09)'; c.beginPath(); c.ellipse(x, y + ih * .52, ih * .4, ih * .08, 0, 0, 7); c.fill();
+  c.save(); c.translate(x, y - ih * .14); c.rotate(Math.sin(g.t * 2 + w.wob) * .1); c.fillStyle = '#000'; c.font = `${Math.round(ih * 1.08)}px ${D_EMOJI}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(w.food || DMEAT, 0, 0); c.restore();
+  c.font = `800 ${fs}px ${G_FONT}`; const tw = c.measureText(w.w).width, lw = Math.min(w.bw, tw + 16), lh = fs + 8, ly = y + ih * .36;
+  c.fillStyle = 'rgba(0,0,0,.12)'; rrect(c, x - lw / 2 + 1, ly - lh / 2 + 2, lw, lh, lh / 2); c.fill();
+  c.fillStyle = 'rgba(255,255,255,.95)'; rrect(c, x - lw / 2, ly - lh / 2, lw, lh, lh / 2); c.fill(); c.strokeStyle = '#e3cfae'; c.lineWidth = 2; c.stroke();
+  c.fillStyle = '#3b3350'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(w.w, x, ly + 1);
   c.restore();
 }
 function dinoMountain(c, ge, g, side){   // 可愛的小山：圓圓的山頂＋雪帽＋臉，side = -1 左邊／1 右邊
@@ -3068,7 +3071,7 @@ function drawDino(c, x, gy, s, face, open, mood, t){
 
 /* ---- 測試用小掛勾 ---- */
 window.__game = {
-  get(){ const g = G; if (!g) return {kind: null, last: G_LAST}; const it = g.items[g.i] || {}; return {kind: g.kind, t: g.t, i: g.i, n: g.items.length, score: g.score, right: g.right, answer: it.answer, w: it.w, mode: it.mode, opts: it.opts, angle: g.angle, charge: g.charge, charging: !!g.charging, lock: !!g.lock, paused: !!g.paused, reveal: g.reveal, dx: g.dx, vx: g.vx, wall: g.wall, geo: g.kind === 'dino' ? dinoGeom() : null, targets: (g.targets || []).map(t => ({w: t.w, ok: t.ok, x: t.x, y: t.y, face: t.face, sink: t.sink, dead: !!t.dead, kind: t.kind, row: t.row, gold: false})), old: (g.old || []).map(t => ({w: t.w, dead: true, face: t.face, sink: t.sink})), belt: (g.belt || []).map(t => ({w: t.w, ok: t.ok, x: t.x, y: t.y, dead: !!t.dead, face: t.face})), bdir: g.bdir, bv: g.bv, bflip: g.bflip, shots: (g.shots || []).length, W: g.W, H: g.H, combo: g.combo, maxCombo: g.maxCombo, spd: g.spd, bd: g.bd, words: (g.words || []).map(w => ({w: w.w, y: w.y, x: w.x, bw: w.bw, ok: w.ok, gold: !!w.gold, rel: w.rel, good: w.good, bad: w.bad, state: w.state})), hard: it.hard ? {w: it.hard.w, zh: it.hard.zh, wp: it.hard.wp} : null, hardPrompt: ($('#gHard') || {}).textContent, dband: DBAND.slice(), bandPx: g.kind === 'dino' ? [0, 1, 2].map(d => dinoBand(dinoGeom(), d, false)) : null, bonusOn: !!g.bonus, bsp: g.bsp, bn: g.bn, bonusDone: g.bonusDone, bonusTotal: g.bonusTotal, bmults: g.bmults, bplan: g.bplan, meteors: (g.meteors || []).length, floats: (g.floats || []).map(f => f.text), trans: g.trans ? {t: g.trans.t, done: g.trans.done} : null, okRun: g.okRun, ate: g.rounds && g.rounds[g.ri] ? g.rounds[g.ri].ate : null, zap: g.zap, phase: g.rd && g.rd.phase, rt: g.rd && g.rd.t, left: g.left, limit: g.limit, timed: !!g.timed, bonus: !!g.bonus, waves: g.waves, rwin: g.rd && g.rd.win, ate: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].ate,  ri: g.ri, nr: g.rounds && g.rounds.length, target: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].target, dmode: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].mode, mcd: g.mcd, stats: g.stats, last: G_LAST}; },
+  get(){ const g = G; if (!g) return {kind: null, last: G_LAST}; const it = g.items[g.i] || {}; return {kind: g.kind, t: g.t, i: g.i, n: g.items.length, score: g.score, right: g.right, answer: it.answer, w: it.w, mode: it.mode, opts: it.opts, angle: g.angle, charge: g.charge, charging: !!g.charging, lock: !!g.lock, paused: !!g.paused, reveal: g.reveal, dx: g.dx, vx: g.vx, wall: g.wall, geo: g.kind === 'dino' ? dinoGeom() : null, targets: (g.targets || []).map(t => ({w: t.w, ok: t.ok, x: t.x, y: t.y, face: t.face, sink: t.sink, dead: !!t.dead, kind: t.kind, row: t.row, gold: false})), old: (g.old || []).map(t => ({w: t.w, dead: true, face: t.face, sink: t.sink})), belt: (g.belt || []).map(t => ({w: t.w, ok: t.ok, x: t.x, y: t.y, dead: !!t.dead, face: t.face})), bdir: g.bdir, bv: g.bv, bflip: g.bflip, shots: (g.shots || []).length, W: g.W, H: g.H, combo: g.combo, maxCombo: g.maxCombo, spd: g.spd, bd: g.bd, words: (g.words || []).map(w => ({food: w.food, w: w.w, y: w.y, x: w.x, bw: w.bw, ok: w.ok, gold: !!w.gold, rel: w.rel, good: w.good, bad: w.bad, state: w.state})), hard: it.hard ? {w: it.hard.w, zh: it.hard.zh, wp: it.hard.wp} : null, hardPrompt: ($('#gHard') || {}).textContent, dband: DBAND.slice(), bandPx: g.kind === 'dino' ? [0, 1, 2].map(d => dinoBand(dinoGeom(), d, false)) : null, bonusOn: !!g.bonus, bsp: g.bsp, bn: g.bn, bonusDone: g.bonusDone, bonusTotal: g.bonusTotal, bmults: g.bmults, bplan: g.bplan, meteors: (g.meteors || []).length, floats: (g.floats || []).map(f => f.text), trans: g.trans ? {t: g.trans.t, done: g.trans.done} : null, okRun: g.okRun, ate: g.rounds && g.rounds[g.ri] ? g.rounds[g.ri].ate : null, zap: g.zap, phase: g.rd && g.rd.phase, rt: g.rd && g.rd.t, left: g.left, limit: g.limit, timed: !!g.timed, bonus: !!g.bonus, waves: g.waves, rwin: g.rd && g.rd.win, ate: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].ate,  ri: g.ri, nr: g.rounds && g.rounds.length, target: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].target, dmode: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].mode, mcd: g.mcd, stats: g.stats, last: G_LAST}; },
   relOf: (w, k) => { const e = DICT[w]; return e ? [...relMap(e, k).keys()] : []; },
   freeze(on){ if (G) G.freeze = on !== false; },
   tagsOf: w => (LEXD[w] || {}).tags || '', isJH: w => /J/.test((LEXD[w] || {}).tags || ''), allItems: () => (G ? G.items.map(it => ({w: it.w, hardWords: it.hard ? [it.hard.w].concat(it.hard.wp) : null, answer: it.answer, opts: it.opts, mode: it.mode, hard: it.hard || null})) : []), contentOk: w => gContentOk(w), isFunc: w => FUNC_WORDS.has(w), gamePool: () => gamePool().list.slice(), noneWords: () => (G && G.rd ? G.rd.sup.none.map(x => x.w) : []),
