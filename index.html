@@ -472,11 +472,11 @@ body.gplay::before{content:"";position:fixed;inset:0;z-index:59;background:linea
 .gfull .gpq{font-size:1.08em;line-height:1.3}.gfull .gpq.zh{font-size:1.12em}
 .gfull .dsub{display:none}
 .gfull .gctrl{flex:0 0 auto;width:100%;max-width:720px;margin:0 auto}
-.gfull .gbtn{min-height:62px}
+.gfull .gbtn{min-height:72px}.gfull .gbtn.dir b{font-size:1.9em}
 .gfull .gbtn.dir{flex-basis:84px}
 .gfull .gpill{padding:3px 9px;font-size:.84em}
 @media (max-width:640px){ .gfull .gtitle .gn{display:none} .gfull .gsmall{padding:0 8px;min-width:38px} }
-@media (min-width:900px) and (min-height:700px){ .gfull .gbtn{min-height:76px} .gfull .gprompt{padding:8px 16px} .gfull .gpq{font-size:1.3em} .gfull .gctrl{max-width:760px} }
+@media (min-width:900px) and (min-height:700px){ .gfull .gbtn{min-height:84px} .gfull .gprompt{padding:8px 16px} .gfull .gpq{font-size:1.3em} .gfull .gctrl{max-width:760px} }
 /* 手機橫放：左右兩邊放按鈕，中間是舞台 */
 @media (max-height:520px) and (orientation:landscape){
   .gcard.gfull{display:grid;grid-template-columns:104px minmax(0,1fr) 104px;grid-template-rows:auto auto minmax(0,1fr);gap:4px 8px;width:100%}
@@ -2784,14 +2784,15 @@ function dinoBwOf(text, ge){ return Math.max(ge.ih * .95, Math.min(Math.min(ge.W
    1) 同一排左右相鄰的字，中心距離至少 = 1.6 × 恐龍寬度 + 字牌寬度（中間一定有讓恐龍通過的縫）。
    2) 從畫面上任何位置出發，恐龍都要在「這一排掉到之前」走得到縫：最遠要走的距離 ≤ 恐龍速度 × (兩排間隔時間 − 通過時間) × 0.7，
       而且 ≤ 恐龍速度 × 字掉下來的時間 × 0.5（掉落時間 × 恐龍速度 ≥ 需要走的距離）。不夠就等一下再出。 ---- */
-const DBAND = [.42, .36, .30, .29];   // 兩排之間的距離（畫面高度的比例）：少／中／多／加分時間（v8：比以前的 .29/.25/.20/.20 拉開約 1.45 倍，給恐龍更多閃躲空間）
-/* v8：兩排之間的距離（像素）。想要的距離 = DBAND × 畫面高度（比以前拉開約 1.45 倍）；但「隨時畫面上 ≥ 5 個字」的規則還是要守住：
-   需要的排數 R = ceil(5 ÷ 每排最少字數)，所以距離不能大過 (畫面高度 − 地面) ÷ R。窄的直立手機每排只放得下 2 個字 → R = 3；橫放／桌機每排 3 個以上 → R = 2。
-   但不會比舊版（.29/.25/.20/.20）更小。 */
-const DINO_MINVIS = 5;   // 畫面上隨時至少要有幾個字（調成 4 → 直立手機的間距可以再拉大，但畫面上有時只剩 4 個字）
-const DBAND_OLD = [.29, .25, .20, .20];
-function dinoKmin(ge){ const avg = 7 * ge.fs * .58 + 24; const kmax = Math.max(1, Math.min(4, Math.floor((ge.px1 - ge.px0 - avg) / (dinoGap(ge) + avg)) + 1)); return kmax < 2 ? 1 : (ge.H < 420 && kmax >= 3 ? 3 : 2); }
-function dinoBand(ge, dens, bonus){ const i = bonus ? 3 : dens; const want = DBAND[i] * ge.H, old = DBAND_OLD[i] * ge.H; const R = Math.ceil(DINO_MINVIS / dinoKmin(ge)); const cap = (ge.gy + 12) / R * .92; return Math.max(old, Math.min(want, cap)); }
+/* v9：字的數量（少／中／多）＝畫面上「同時看得到」的字數：少 ≈ 5、中 ≈ 7～8、多 ≈ 10～12。
+   以前三個選項都被「隨時 ≥ 5 個字」的上限壓成同一個間距（直立手機每排只放得下 2 個字 → 三種都是 3 排），所以每秒掉的字數幾乎一樣（0.94／0.95／0.95）。
+   現在：想要的字數 ÷ 每排平均字數 = 畫面上要有幾排；排距 = (地面 + 12) ÷ 排數。排距最小是字牌高度的 1.5 倍（上下兩排之間一定留空）。
+   寬的畫面（橫放、平板、桌機）每排可以放 3 個字，排數少、排距大；窄的直立手機每排只放得下 2 個字，所以「多」的排距比較小，但左右的閃躲縫、前後兩排的閃躲規則都維持。 */
+const DVIS = [5, 7.5, 11.5];
+const DMINV = [4, 6, 9];   // 畫面上的字低於這個數 → 下一排提早一點出來／多放一個字（少：5 個字、有時是 4 個）
+function dinoKmax(ge){ const avg = 7 * ge.fs * .58 + 24; return Math.max(1, Math.min(4, Math.floor((ge.px1 - ge.px0 - avg) / (dinoGap(ge) + avg)) + 1)); }
+function dinoKavg(ge, dens){ const km = dinoKmax(ge); return km < 2 ? 1 : dens === 0 ? 2 : dens === 1 ? (km >= 3 ? 2.5 : 2) : (km >= 3 ? 2.8 : 2); }
+function dinoBand(ge, dens, bonus){ const i = bonus ? 1 : dens; const rows = DVIS[i] / dinoKavg(ge, bonus ? 2 : dens); return Math.max(ge.ih * 1.5, (ge.gy + 12) / rows); }
 function dinoGap(ge){ return 1.6 * ge.dinoW; }
 function dinoLayout(ge, bws, rnd){   // 由左到右排好 k 個字的中心 x；排不下就回 null
   const k = bws.length, gap = dinoGap(ge); let minSpan = 0; for (let i = 0; i + 1 < k; i++) minSpan += gap + (bws[i] + bws[i + 1]) / 2;
@@ -2815,28 +2816,34 @@ function dinoReach(ge, tau, vf){   // 這排字掉下來之前，恐龍最多能
   return Math.min(ge.vmax * .7 * Math.max(0, tau - win), ge.vmax * tf * .5);
 }
 
-function dinoPlan(ge, bws, tau, vf, rnd, wrong){   // 排好的位置＋安全縫；不符合規則就回 null
+/* v9：排距變小之後（字的數量「多」），「從畫面上任何位置都走得到縫」太嚴格了（會逼排程等很久，字數就上不去）。
+   其實恐龍這時一定站在「上一排」的安全縫裡 → 只要求：從上一排安全縫的任何一點，到這一排最近的安全縫，走得到（兩排的縫重疊 = 不用走）。
+   兩種規則只要有一種過關就算（距離取小的那個），而且都用同一個 dinoReach（掉落速度、恐龍速度、兩排間隔）檢查。 */
+function dinoSeqDist(ge, prev, free){
+  const dist = x => { let m = 1e9; for (const [a, b] of free) m = Math.min(m, x < a ? a - x : x > b ? x - b : 0); return m; };
+  const cand = []; for (const [a, b] of prev){ cand.push(a, b); for (let i = 0; i + 1 < free.length; i++){ const m = (free[i][1] + free[i + 1][0]) / 2; if (m > a && m < b) cand.push(m); } }
+  return Math.max(0, ...cand.map(dist));
+}
+function dinoPlan(ge, bws, tau, vf, rnd, wrong, prev){   // 排好的位置＋安全縫；不符合規則就回 null
   const xs = dinoLayout(ge, bws, rnd); if (!xs) return null; const free = dinoFree(ge, xs, bws, wrong); if (!free.length) return null;
-  const need = dinoMaxDist(ge, free); if (need > dinoReach(ge, tau, vf)) return null;
+  let need = dinoMaxDist(ge, free); if (prev && prev.length) need = Math.min(need, dinoSeqDist(ge, prev, free)); if (need > dinoReach(ge, tau, vf)) return null;
   return {xs, free, need};
 }
 // 先用想要的個數找；找不到就多等一下（等得越久，恐龍能走得越遠），等太久才減少一排的字數
-function dinoSearch(ge, k0, tau, minIv, vf, gen, rnd){
+function dinoSearch(ge, k0, tau, minIv, vf, gen, rnd, prev){
   for (let kk = k0; kk >= 1; kk--){ if (kk < k0 && tau < minIv * 1.8) break;
-    for (let t = 0; t < (kk === k0 ? 16 : 6); t++){ const c = gen(kk); if (!c) continue; const plan = dinoPlan(ge, c.bws, tau, vf, rnd, c.wrong); if (plan) return {kk, c, plan}; } }
+    for (let t = 0; t < (kk === k0 ? 16 : 6); t++){ const c = gen(kk); if (!c) continue; const plan = dinoPlan(ge, c.bws, tau, vf, rnd, c.wrong, prev); if (plan) return {kk, c, plan}; } }
   return null;
 }
 function dinoWaveK(ge, dens, rnd){   // 這一排要放幾個字（依「字的數量」少／中／多）
-  const r = (rnd || Math.random)(); const avg = 7 * ge.fs * .58 + 24; const kmax = Math.max(1, Math.min(4, Math.floor((ge.px1 - ge.px0 - avg) / (dinoGap(ge) + avg)) + 1));
-  // 一次進來 2～3 個字（畫面太窄就 2 個）：畫面上隨時都有 5 個以上的字
+  const r = (rnd || Math.random)(); const kmax = dinoKmax(ge);
   if (kmax < 2) return 1;
-  if (ge.H < 420 && kmax >= 3) return 3;   // 矮矮的橫放畫面：每排 3 個，才不會有空檔
-  if (dens === 0) return kmax >= 3 && r < .3 ? 3 : 2;
-  if (dens === 1) return kmax >= 3 && r < .6 ? 3 : 2;
+  if (dens === 0) return 2;
+  if (dens === 1) return kmax >= 3 && r < .5 ? 3 : 2;
   return kmax >= 3 ? (r < .8 ? 3 : 2) : 2;
 }
 
-function dinoBoostK(ge, k0, vis){ return vis <= 4 ? Math.max(k0, Math.min(3, dinoWaveK(ge, 2, () => .5))) : k0; }   // 畫面上的字太少 → 這一排多放一個
+function dinoBoostK(ge, k0, vis, dens){ return vis < DMINV[dens == null ? 1 : dens] ? Math.max(k0, Math.min(3, dinoWaveK(ge, 2, () => .5))) : k0; }   // 畫面上的字太少 → 這一排多放一個
 function dinoKinds(k, inflight, rnd, bonus){   // v8：每一排至少一半是對的字（3 個字 → 至少 2 個對的），玩家會覺得有很多個正確選擇
   const r = rnd || Math.random; const pg = bonus ? .6 : .5; const ng = () => r() < .4 ? 'bad' : 'none'; const out = [];
   if (k >= 3){ out.push('good', 'good', ng()); for (let i = 3; i < k; i++) out.push(r() < pg ? 'good' : ng()); }
@@ -2860,20 +2867,26 @@ function dinoWaveTry(){   // 回傳 true = 這一排出去了
   const g = G, rd = g.rd, vNow = dinoV(); const geN = dinoGeomOf(g.W, g.H, GS.speed, false);
   // 加分時間快到了（或正在加分時間）→ 用 2 倍速度檢查，保證速度變快之後縫還是走得到
   const nx = g.bplan[g.bidx], el = g.limit - g.left; const soon = g.bonus || (nx && nx.s - el < geN.tFall + .5);
-  const vW = soon ? dinoFallV(g.H, GS.speed, true, g.speedMul) : vNow; const tauEff = g.sch.tau * vNow / vW; const dens = g.bonus ? 2 : GS.dens;
+  const vW = soon ? dinoFallV(g.H, GS.speed, true, g.speedMul) : vNow; const tauEff = g.sch.tau * vNow / vW; const dens = g.bonus ? 2 : GS.dens, bi = g.bonus ? 1 : GS.dens;
   const fall = g.words.filter(w => w.state === 'fall'); const inflight = {good: fall.some(w => w.good), nongood: fall.some(w => !w.good)};
-  const visN = fall.filter(w => w.y > -12 && w.y < geN.gy).length; const k0 = dinoBoostK(geN, dinoWaveK(geN, dens), visN), ge = dinoGeom();
-  const res = dinoSearch(geN, k0, tauEff, dinoBand(geN, dens, g.bonus) / vW, vW, kk => { const kinds = dinoKinds(kk, inflight, null, g.bonus); const its = dinoPickWords(g, kinds); return its && {its, bws: its.map(it => dinoBwOf(it.w, ge)), wrong: its.map(it => it.rel !== rd.mode)}; });
+  const visN = fall.filter(w => w.y > -12 && w.y < geN.gy).length; const k0 = dinoBoostK(geN, dinoWaveK(geN, dens), visN, bi), ge = dinoGeom();
+  const res = dinoSearch(geN, k0, tauEff, dinoBand(geN, dens, g.bonus) / vW, vW, kk => { const kinds = dinoKinds(kk, inflight, null, g.bonus); const its = dinoPickWords(g, kinds); return its && {its, bws: its.map(it => dinoBwOf(it.w, ge)), wrong: its.map(it => it.rel !== rd.mode)}; }, null, g.prevFree);
   if (!res) return false;
   const its = res.c.its, plan = res.plan, bws = res.c.bws; const cols = ['#ffd6e7', '#fff1b8', '#d4f5e4', '#dcecff', '#ece2ff'];
   its.forEach((it, i) => { g.words.push({w: it.w, zh: it.zh, rel: it.rel, good: it.rel === rd.mode, bad: it.rel !== 'none' && it.rel !== rd.mode, x: plan.xs[i], bw: bws[i], y: -30, col: cols[(g.nwords = (g.nwords || 0) + 1) % cols.length], food: dinoFood(), state: 'fall', a: 1, wob: Math.random() * 6}); rd.shown[it.w] = (rd.shown[it.w] || 0) + 1; g.rounds[rd.r].shown[it.w] = 1; });
-  g.sch.tau = 0; g.waves = (g.waves || 0) + 1; return true;
+  g.sch.tau = 0; g.prevFree = plan.free; g.waves = (g.waves || 0) + 1; return true;
 }
 function dinoPrefill(){   // 一開始（或換題後）畫面上就已經有一整串字在往下掉，不用等
-  const g = G; if (!g || !g.rd) return; const ge = dinoGeom(), v = dinoV(); const band = dinoBand(ge, GS.dens, g.bonus); const n = Math.max(1, Math.floor((ge.hitTop - 90) / band) + 1);
-  g.words.forEach(w => { if (w.state === 'fall') w.state = 'fade'; });
-  for (let i = 0; i < n; i++){ g.sch.tau = Math.max(g.sch.tau, 99); if (!dinoWaveTry()) break; g.words.forEach(w => { if (w.state === 'fall') w.y += band; }); }
-  g.sch.tau = band / v;
+  const g = G; if (!g || !g.rd) return; const ge = dinoGeom(), v = dinoV(); const band = dinoBand(ge, GS.dens, g.bonus);
+  // 最下面那一排停在恐龍嘴巴上方（不會一開始就掉進嘴裡），往上每隔一個排距放一排，直到畫面頂端；
+  // 第一排沒有「上一排」，恐龍有整段下落時間可以先站好位置，所以用很長的間隔檢查
+  const yLow = ge.hitTop - 75 - ge.ih / 2, m = Math.max(1, Math.floor((yLow + 12) / band) + 1);
+  g.words.forEach(w => { if (w.state === 'fall') w.state = 'fade'; }); g.prevFree = null; let top = yLow;
+  for (let i = 0; i < m; i++){
+    let done = false, n0 = g.words.length; for (let t = 0; t < 12 && !done; t++){ g.sch.tau = i === 0 ? 99 : band / v * (1 + t * .1); done = dinoWaveTry(); } if (!done) break;
+    top = yLow - i * band; for (let j = n0; j < g.words.length; j++) g.words[j].y = top;
+  }
+  g.sch.tau = Math.max(0, (top + 30) / v);   // 最上面那一排再往下 (排距) 就輪到下一排從畫面頂端進來
 }
 function gBanner(html, secs, cls){
   const b = $('#gBanner'); if (!b) return; b.innerHTML = html; b.className = 'gbanner show ' + (cls || ''); const tok = b._tok = (b._tok || 0) + 1;
@@ -2913,8 +2926,8 @@ function dinoUpdate(dt){
     else {
       g.left = Math.max(0, g.left - dt); bonusTick(g, dt);
       rd.t += dt; g.sch.tau += dt;
-      const vis5 = g.words.filter(w => w.state === 'fall' && w.y > -12 && w.y < ge.gy).length;   // 畫面上不到 5 個字 → 下一排提早一點出來（至少等到 85% 的間距）
-      if (g.sch.tau >= dinoBand(ge, GS.dens, g.bonus) / v * (vis5 < 5 ? .85 : 1)) dinoWaveTry();
+      const vis5 = g.words.filter(w => w.state === 'fall' && w.y > -12 && w.y < ge.gy).length;   // 畫面上的字比這個密度該有的最少字數還少 → 下一排提早一點出來（至少等到 85% 的間距）
+      if (g.sch.tau >= dinoBand(ge, GS.dens, g.bonus) / v * (vis5 < DMINV[g.bonus ? 1 : GS.dens] ? .85 : 1)) dinoWaveTry();
       if (g.left > 4 && !g.bonus && (rd.t >= rd.win || g.rounds[rd.r].ate >= rd.need) && !(g.bplan[g.bidx] && g.bplan[g.bidx].s - (g.limit - g.left) < 2.5)) gTransStart(g, () => dinoSwitch());
     }
   }
@@ -3071,7 +3084,7 @@ function drawDino(c, x, gy, s, face, open, mood, t){
 
 /* ---- 測試用小掛勾 ---- */
 window.__game = {
-  get(){ const g = G; if (!g) return {kind: null, last: G_LAST}; const it = g.items[g.i] || {}; return {kind: g.kind, t: g.t, i: g.i, n: g.items.length, score: g.score, right: g.right, answer: it.answer, w: it.w, mode: it.mode, opts: it.opts, angle: g.angle, charge: g.charge, charging: !!g.charging, lock: !!g.lock, paused: !!g.paused, reveal: g.reveal, dx: g.dx, vx: g.vx, wall: g.wall, geo: g.kind === 'dino' ? dinoGeom() : null, targets: (g.targets || []).map(t => ({w: t.w, ok: t.ok, x: t.x, y: t.y, face: t.face, sink: t.sink, dead: !!t.dead, kind: t.kind, row: t.row, gold: false})), old: (g.old || []).map(t => ({w: t.w, dead: true, face: t.face, sink: t.sink})), belt: (g.belt || []).map(t => ({w: t.w, ok: t.ok, x: t.x, y: t.y, dead: !!t.dead, face: t.face})), bdir: g.bdir, bv: g.bv, bflip: g.bflip, shots: (g.shots || []).length, W: g.W, H: g.H, combo: g.combo, maxCombo: g.maxCombo, spd: g.spd, bd: g.bd, words: (g.words || []).map(w => ({food: w.food, w: w.w, y: w.y, x: w.x, bw: w.bw, ok: w.ok, gold: !!w.gold, rel: w.rel, good: w.good, bad: w.bad, state: w.state})), hard: it.hard ? {w: it.hard.w, zh: it.hard.zh, wp: it.hard.wp} : null, hardPrompt: ($('#gHard') || {}).textContent, dband: DBAND.slice(), bandPx: g.kind === 'dino' ? [0, 1, 2].map(d => dinoBand(dinoGeom(), d, false)) : null, bonusOn: !!g.bonus, bsp: g.bsp, bn: g.bn, bonusDone: g.bonusDone, bonusTotal: g.bonusTotal, bmults: g.bmults, bplan: g.bplan, meteors: (g.meteors || []).length, floats: (g.floats || []).map(f => f.text), trans: g.trans ? {t: g.trans.t, done: g.trans.done} : null, okRun: g.okRun, ate: g.rounds && g.rounds[g.ri] ? g.rounds[g.ri].ate : null, zap: g.zap, phase: g.rd && g.rd.phase, rt: g.rd && g.rd.t, left: g.left, limit: g.limit, timed: !!g.timed, bonus: !!g.bonus, waves: g.waves, rwin: g.rd && g.rd.win, ate: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].ate,  ri: g.ri, nr: g.rounds && g.rounds.length, target: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].target, dmode: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].mode, mcd: g.mcd, stats: g.stats, last: G_LAST}; },
+  get(){ const g = G; if (!g) return {kind: null, last: G_LAST}; const it = g.items[g.i] || {}; return {kind: g.kind, t: g.t, i: g.i, n: g.items.length, score: g.score, right: g.right, answer: it.answer, w: it.w, mode: it.mode, opts: it.opts, angle: g.angle, charge: g.charge, charging: !!g.charging, lock: !!g.lock, paused: !!g.paused, reveal: g.reveal, dx: g.dx, vx: g.vx, wall: g.wall, geo: g.kind === 'dino' ? dinoGeom() : null, targets: (g.targets || []).map(t => ({w: t.w, ok: t.ok, x: t.x, y: t.y, face: t.face, sink: t.sink, dead: !!t.dead, kind: t.kind, row: t.row, gold: false})), old: (g.old || []).map(t => ({w: t.w, dead: true, face: t.face, sink: t.sink})), belt: (g.belt || []).map(t => ({w: t.w, ok: t.ok, x: t.x, y: t.y, dead: !!t.dead, face: t.face})), bdir: g.bdir, bv: g.bv, bflip: g.bflip, shots: (g.shots || []).length, W: g.W, H: g.H, combo: g.combo, maxCombo: g.maxCombo, spd: g.spd, bd: g.bd, words: (g.words || []).map(w => ({food: w.food, w: w.w, y: w.y, x: w.x, bw: w.bw, ok: w.ok, gold: !!w.gold, rel: w.rel, good: w.good, bad: w.bad, state: w.state})), hard: it.hard ? {w: it.hard.w, zh: it.hard.zh, wp: it.hard.wp} : null, hardPrompt: ($('#gHard') || {}).textContent, dband: DVIS.slice(), bandPx: g.kind === 'dino' ? [0, 1, 2].map(d => dinoBand(dinoGeom(), d, false)) : null, bonusOn: !!g.bonus, bsp: g.bsp, bn: g.bn, bonusDone: g.bonusDone, bonusTotal: g.bonusTotal, bmults: g.bmults, bplan: g.bplan, meteors: (g.meteors || []).length, floats: (g.floats || []).map(f => f.text), trans: g.trans ? {t: g.trans.t, done: g.trans.done} : null, okRun: g.okRun, ate: g.rounds && g.rounds[g.ri] ? g.rounds[g.ri].ate : null, zap: g.zap, phase: g.rd && g.rd.phase, rt: g.rd && g.rd.t, left: g.left, limit: g.limit, timed: !!g.timed, bonus: !!g.bonus, waves: g.waves, rwin: g.rd && g.rd.win, ate: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].ate,  ri: g.ri, nr: g.rounds && g.rounds.length, target: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].target, dmode: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].mode, mcd: g.mcd, stats: g.stats, last: G_LAST}; },
   relOf: (w, k) => { const e = DICT[w]; return e ? [...relMap(e, k).keys()] : []; },
   freeze(on){ if (G) G.freeze = on !== false; },
   tagsOf: w => (LEXD[w] || {}).tags || '', isJH: w => /J/.test((LEXD[w] || {}).tags || ''), allItems: () => (G ? G.items.map(it => ({w: it.w, hardWords: it.hard ? [it.hard.w].concat(it.hard.wp) : null, answer: it.answer, opts: it.opts, mode: it.mode, hard: it.hard || null})) : []), contentOk: w => gContentOk(w), isFunc: w => FUNC_WORDS.has(w), gamePool: () => gamePool().list.slice(), noneWords: () => (G && G.rd ? G.rd.sup.none.map(x => x.w) : []),
@@ -3122,15 +3135,15 @@ function dinoSim(k, dens, o){
   const ge = dinoGeomOf(W, H, k, bonus), vf = ge.vf; let seed = o.seed || (k * 7 + dens * 13 + 1);
   const rnd = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296; const gap = dinoGap(ge);
   const R = {W, H, k, dens, bonus, ge: {dinoW: ge.dinoW, vmax: ge.vmax, vf, tFall: ge.tFall, c0: ge.c0, c1: ge.c1, px0: ge.px0, px1: ge.px1, hw: ge.hw}, waves: 0, words: 0, violations: 0, unreachable: 0, travelViol: 0, minRatio: 99, maxNeed: 0, minGapPx: 1e9, minSlack: 1e9, time: 0, kCount: {}, wait: 0, noGood: 0, noWrong: 0, cant: 0};
-  const minIv = dinoBand(ge, dens, bonus) / vf; let t = 0; if (bonus) dens = 2;
+  const minIv = dinoBand(ge, dens, bonus) / vf; let t = 0, prev = null; const dens0 = dens; if (bonus) dens = 2;
   for (let n = 0; n < N; n++){
-    const visN = (R.wt || []).reduce((a, [tw, k]) => { const y = -30 + (t - tw) * vf; return a + (t >= tw && y > -12 && y < ge.gy ? k : 0); }, 0); const k0 = dinoBoostK(ge, dinoWaveK(ge, dens, rnd), visN); let res = null, tau = minIv;
+    const visN = (R.wt || []).reduce((a, [tw, k]) => { const y = -30 + (t - tw) * vf; return a + (t >= tw && y > -12 && y < ge.gy ? k : 0); }, 0); const k0 = dinoBoostK(ge, dinoWaveK(ge, dens, rnd), visN, bonus ? 1 : dens0); let res = null, tau = minIv;
     for (let guard = 0; guard < 4000 && !res; guard++){
-      res = dinoSearch(ge, k0, tau, minIv, vf, kk => { const kinds = dinoKinds(kk, {good: true, nongood: true}, rnd); return {kinds, bws: kinds.map(() => dinoBwOf('a'.repeat(3 + Math.floor(rnd() * 8)), ge)), wrong: kinds.map(x => x !== 'good')}; }, rnd);
+      res = dinoSearch(ge, k0, tau, minIv, vf, kk => { const kinds = dinoKinds(kk, {good: true, nongood: true}, rnd); return {kinds, bws: kinds.map(() => dinoBwOf('a'.repeat(3 + Math.floor(rnd() * 8)), ge)), wrong: kinds.map(x => x !== 'good')}; }, rnd, prev);
       if (!res) tau += 1 / 30;
     }
     R.wait += tau - minIv; t += tau; if (!res){ R.cant++; continue; }
-    const {plan, c} = res, bws = c.bws; R.kCount[res.kk] = (R.kCount[res.kk] || 0) + 1;
+    const {plan, c} = res, bws = c.bws; prev = plan.free; R.kCount[res.kk] = (R.kCount[res.kk] || 0) + 1;
     R.waves++; R.words += bws.length; (R.wt = R.wt || []).push([t, bws.length]); R.maxNeed = Math.max(R.maxNeed, plan.need);
     if (bws.length >= 2 && !c.kinds.includes('good')) R.noGood++; if (bws.length >= 2 && !c.kinds.some(x => x !== 'good')) R.noWrong++;
     for (let i = 0; i + 1 < bws.length; i++){ const d = plan.xs[i + 1] - plan.xs[i], req = gap + (bws[i] + bws[i + 1]) / 2; R.minRatio = Math.min(R.minRatio, d / req); R.minGapPx = Math.min(R.minGapPx, d - (bws[i] + bws[i + 1]) / 2); if (d < req - 1e-6) R.violations++; }
