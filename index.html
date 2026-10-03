@@ -21,7 +21,7 @@
   --fs:17px;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;padding:0;overflow-x:hidden}
+html,body{margin:0;padding:0}html{overflow-x:hidden}body{overflow-x:clip}
 body{
   font-family:"PingFang TC","Heiti TC","Noto Sans TC","Microsoft JhengHei",system-ui,-apple-system,sans-serif;
   font-size:var(--fs); color:var(--ink); line-height:1.55;
@@ -143,7 +143,7 @@ details.ety .etybody{padding:0 0 12px}
 .score{display:flex;gap:8px;flex-wrap:wrap;color:var(--ink2);font-size:.9em;margin-bottom:8px}
 .credits{font-size:.78em;color:var(--ink2);line-height:1.6}
 .credits a{color:#7a5bd6}
-.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#4a3d7a;color:#fff;padding:10px 18px;border-radius:999px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:9;max-width:90vw;text-align:center}
+.toast{z-index:80;position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#4a3d7a;color:#fff;padding:10px 18px;border-radius:999px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:9;max-width:90vw;text-align:center}
 .toast.show{opacity:1}
 .welcome{text-align:center;padding:10px}
 .welcome .wimg{width:140px;height:140px;margin:0 auto;display:grid;place-items:center}
@@ -434,6 +434,70 @@ h3.sub{margin:14px 0 6px;font-size:1em;color:#4a3d7a}
 .gbanner.topic.show{animation:topicpop .7s cubic-bezier(.3,1.6,.5,1)}
 @keyframes topicpop{0%{transform:translate(-50%,0) scale(.3) rotate(-8deg)}60%{transform:translate(-50%,0) scale(1.18) rotate(3deg)}100%{transform:translate(-50%,0) scale(1) rotate(0)}}
 .gbanner.topic{border-color:#ffd24d;background:linear-gradient(135deg,#fff,#ffeaf4)}
+
+/* ===== v7：開始前的設定面板、Cookie 同意條、全螢幕遊戲版面（手機直／橫、平板、桌機） ===== */
+.ckbar{position:fixed;left:0;right:0;bottom:0;z-index:50;display:flex;align-items:center;gap:10px;padding:8px 12px calc(8px + env(safe-area-inset-bottom));background:#4a3d7a;color:#fff;font-size:13px;line-height:1.35;box-shadow:0 -4px 16px rgba(74,61,122,.25)}
+.ckbar .ckt{flex:1;min-width:0}.ckbar .ckb{display:flex;gap:8px;flex:0 0 auto}
+.ckbar button{min-height:40px;min-width:64px;padding:0 14px;border-radius:12px;font-weight:800;font-size:14px}
+.ckbar .ckyes{background:#ffd24d;color:#5a3b00}.ckbar .ckno{background:rgba(255,255,255,.18);color:#fff}
+body.ckon{--ckh:72px;padding-bottom:calc(var(--ckh) + 12px)}
+.gsetup{padding:16px;gap:12px;display:flex;flex-direction:column;border:3px solid #ffe1ec}
+.gsu-head{display:flex;gap:12px;align-items:center}
+.gsu-ic{flex:0 0 auto;width:56px;height:56px;border-radius:18px;background:var(--yellow2);display:grid;place-items:center;font-size:32px}
+.gsu-t{font-weight:900;font-size:1.3em;color:#4a3d7a}.gsu-s{color:var(--ink2);font-size:.9em;line-height:1.45}
+.gsetup .gset{flex-direction:column;align-items:stretch;gap:12px;padding:12px}
+.gsetup .gsgrp{gap:8px 8px;align-items:center}
+.gsetup .gsgrp .chip{min-height:48px;min-width:52px;font-size:1.02em}
+.gsetup .gsgrp{display:flex}
+.gsetup .gsgrp>.qbl{flex-basis:100%}
+.gsu-saved{font-size:.88em;color:var(--ink2);background:#f7f3ff;border-radius:14px;padding:8px 12px;line-height:1.5}
+.gsu-saved b{color:#6a4fd1}
+.gstart{position:sticky;bottom:calc(10px + var(--ckh,0px));z-index:5;min-height:76px;border-radius:26px;font-weight:900;font-size:1.9em;letter-spacing:.04em;color:#fff;background:linear-gradient(180deg,#7be0a8,#35bd84);box-shadow:0 8px 0 #24946a,0 14px 24px rgba(36,148,106,.3);display:flex;align-items:center;justify-content:center;gap:10px;animation:startpulse 1.6s ease-in-out infinite}
+.gstart small{font-size:.5em;font-weight:800}.gstart .gsp{font-size:.8em}
+.gstart:active{transform:translateY(5px);box-shadow:0 3px 0 #24946a}
+@keyframes startpulse{0%,100%{box-shadow:0 8px 0 #24946a,0 14px 24px rgba(36,148,106,.3)}50%{box-shadow:0 8px 0 #24946a,0 0 0 8px rgba(123,224,168,.45)}}
+/* 全螢幕遊戲 */
+html.gplay{overflow:hidden}
+body.gplay::before{content:"";position:fixed;inset:0;z-index:59;background:linear-gradient(160deg,#fff0f7,#eee6ff)}
+#quizView.gaming{padding-bottom:0}
+.gcard.gfull{position:fixed;top:0;bottom:0;left:0;right:0;margin:0 auto;width:min(100%,1180px);z-index:60;border-radius:0;box-shadow:none;background:transparent;border:0;gap:6px;overflow:hidden;
+  padding:calc(6px + env(safe-area-inset-top)) calc(8px + env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) calc(8px + env(safe-area-inset-left))}
+.gfull .ghead{flex-wrap:nowrap;gap:6px;flex:0 0 auto}
+.gfull .gtitle .ic{width:32px;height:32px;font-size:18px}
+.gfull .gstat{gap:5px;flex-wrap:nowrap}
+.gfull .gstage{flex:1 1 0;min-height:0;box-shadow:inset 0 0 0 3px #ffe1ec,0 6px 20px rgba(120,80,160,.15)}
+.gfull .gstage canvas{position:absolute;left:0;top:0;height:100%}
+.gfull .gprompt{min-height:0;padding:4px 10px;flex:0 0 auto}
+.gfull .gpq{font-size:1.08em;line-height:1.3}.gfull .gpq.zh{font-size:1.12em}
+.gfull .dsub{display:none}
+.gfull .gctrl{flex:0 0 auto;width:100%;max-width:720px;margin:0 auto}
+.gfull .gbtn{min-height:62px}
+.gfull .gbtn.dir{flex-basis:84px}
+.gfull .gpill{padding:3px 9px;font-size:.84em}
+@media (max-width:640px){ .gfull .gtitle .gn{display:none} .gfull .gsmall{padding:0 8px;min-width:38px} }
+@media (min-width:900px) and (min-height:700px){ .gfull .gbtn{min-height:76px} .gfull .gprompt{padding:8px 16px} .gfull .gpq{font-size:1.3em} .gfull .gctrl{max-width:760px} }
+/* 手機橫放：左右兩邊放按鈕，中間是舞台 */
+@media (max-height:520px) and (orientation:landscape){
+  .gcard.gfull{display:grid;grid-template-columns:104px minmax(0,1fr) 104px;grid-template-rows:auto auto minmax(0,1fr);gap:4px 8px;width:100%}
+  .gcard.gfull[data-gkind="ninja"]{grid-template-columns:150px minmax(0,1fr) 120px}
+  .gfull .ghead,.gfull .gprompt,.gfull .gnote{grid-column:1/-1}
+  .gfull .gstage{grid-column:2;grid-row:3}
+  .gfull .gctrl{display:contents}
+  .gfull .gbtn{min-height:0;height:100%;max-height:none}
+  .gfull .gbtn.dir{flex-basis:auto}
+  .gfull .ghint{display:none}
+  .gfull #gL{grid-column:1;grid-row:3} .gfull #gR{grid-column:3;grid-row:3}
+  .gcard.gfull[data-gkind="ninja"] #gL{grid-column:1;grid-row:3;justify-self:start;width:70px}
+  .gcard.gfull[data-gkind="ninja"] #gR{grid-column:1;grid-row:3;justify-self:end;width:70px}
+  .gcard.gfull[data-gkind="ninja"] #gFire{grid-column:3;grid-row:3}
+  .gfull .gprompt{padding:2px 10px}.gfull .dprompt{gap:2px 8px}
+  .gfull .gtitle .gn{display:none}
+}
+
+@media (min-width:700px){ .gsetup .gset{display:grid;grid-template-columns:1fr 1fr;gap:12px 18px} }
+@media (min-width:700px) and (min-height:640px){ .gstart{position:static;margin-top:4px} }
+@media (max-height:520px){ .gstart{min-height:58px;font-size:1.5em;border-radius:20px;box-shadow:0 6px 0 #24946a} .gsetup{padding:10px;gap:8px} .gsu-ic{width:44px;height:44px;font-size:26px} .gsetup .gsgrp .chip{min-height:44px} .ckbar{padding-top:4px;padding-bottom:4px} .ckbar button{min-height:36px} }
+@media (min-width:820px){ body.ckon{padding-bottom:0} body.ckon .app{height:calc(100vh - var(--ckh));height:calc(100dvh - var(--ckh))} }
 </style>
 </head>
 <body>
@@ -503,7 +567,7 @@ h3.sub{margin:14px 0 6px;font-size:1em;color:#4a3d7a}
       插圖：<a href="https://www.irasutoya.com/" target="_blank" rel="noopener">いらすとや</a>（依其<a href="https://www.irasutoya.com/p/terms.html" target="_blank" rel="noopener">使用規定</a>，非商業教育用途）。<br>
       沒有合適插圖時使用的小圖示：<a href="https://github.com/jdecked/twemoji" target="_blank" rel="noopener">Twemoji</a> © Twitter, Inc. and other contributors，<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>。<br>
       5000 字字庫的單字與級別來自：大學入學考試中心《<a href="https://www.ceec.edu.tw/xmdoc?xsmsid=0K213553204833715309" target="_blank" rel="noopener">高中英文參考詞彙表</a>》（111 學年度起適用，第 1～4 級及部分第 5 級）、Cambridge English <a href="https://www.cambridgeenglish.org/Images/506886-a2-key-vocabulary-list.pdf" target="_blank" rel="noopener">A2 Key</a> 與 <a href="https://www.cambridgeenglish.org/Images/506887-b1-preliminary-vocabulary-list.pdf" target="_blank" rel="noopener">B1 Preliminary</a> 字彙表（2025 年版，© UCLES）、教育部國中小常用 2000 字詞；中文釋義取自開源詞典 <a href="https://github.com/skywind3000/ECDICT" target="_blank" rel="noopener">ECDICT</a>（MIT 授權），以 <a href="https://github.com/BYVoid/OpenCC" target="_blank" rel="noopener">OpenCC</a> 轉為台灣繁體，可能有少數不精確，請對照 Cambridge 辭典。208 個精選單字的例句、翻譯與說明為本頁自行撰寫。查不到的字會自動使用 <a href="https://dictionaryapi.dev/" target="_blank" rel="noopener">Free Dictionary API</a>、<a href="https://www.datamuse.com/api/" target="_blank" rel="noopener">Datamuse</a>、<a href="https://mymemory.translated.net/" target="_blank" rel="noopener">MyMemory</a>（標示「自動取得」）。手寫辨識使用 Google Input Tools。選用的 AI 小幫手（xAI Grok／Google Gemini）使用你自己的金鑰，內容標示「AI 產生」。<br>
-      寶可夢、哆啦A夢、Minecraft（當個創世神）為各權利人之商標；本頁只以文字提及，未使用任何官方圖片，與官方無關。
+      <br><button class="btn sm purple" id="ckReset" type="button">🍪 重新選擇 Cookie 設定</button><br>寶可夢、哆啦A夢、Minecraft（當個創世神）為各權利人之商標；本頁只以文字提及，未使用任何官方圖片，與官方無關。
     </div>
   </section>
 
@@ -1770,15 +1834,57 @@ const SPEEDS = [['很慢', .5], ['慢', .7], ['普通', 1], ['快', 1.45], ['很
 const TIMES = [30, 60, 120];                       // 恐龍／忍者：遊戲時間（秒）
 const DENS = [['少', '少少的'], ['中', '中等'], ['多', '很多']];   // 恐龍：同時掉下來的字多不多
 const BANKNS = [500, 1000, 3000];                  // 恐龍／忍者：字池大小（排名題庫的前 N 個字，最簡單的先）
-const GS = {count: +LS.get('vocabGCount', 10), speed: +LS.get('vocabGSpeed', 1), time: +LS.get('vocabGTime', 60), dens: +LS.get('vocabGDens', 1), bankN: +LS.get('vocabGBankN', 500)};
-if (!COUNTS.includes(GS.count)) GS.count = 10; if (!(GS.speed >= 0 && GS.speed <= 4)) GS.speed = 1; GS.speed |= 0;
-if (!TIMES.includes(GS.time)) GS.time = 60; if (!(GS.dens >= 0 && GS.dens <= 2)) GS.dens = 1; GS.dens |= 0; if (!BANKNS.includes(GS.bankN)) GS.bankN = 500;
+/* ---- 偏好設定與 Cookie 同意：按「允許」→ 設定＋匿名隨機編號存進 Cookie（localStorage 當備份）；「不允許」→ 只在這次開著的時候有效（sessionStorage） ---- */
+const PCK = 'ketv_prefs', UCK = 'ketv_uid', PREFKEYS = ['count', 'speed', 'time', 'dens', 'bankN'];
+const CK = {
+  get(n){ try{ const m = document.cookie.match(new RegExp('(?:^|; )' + n + '=([^;]*)')); return m ? decodeURIComponent(m[1]) : null; }catch(e){ return null; } },
+  set(n, v){ try{ document.cookie = n + '=' + encodeURIComponent(v) + '; max-age=31536000; path=/; SameSite=Lax' + (location.protocol === 'https:' ? '; Secure' : ''); }catch(e){} },
+  del(n){ try{ document.cookie = n + '=; max-age=0; path=/; SameSite=Lax'; }catch(e){} }
+};
+const SS = {get(k){ try{ const v = sessionStorage.getItem(k); return v ? JSON.parse(v) : null; }catch(e){ return null; } }, set(k, v){ try{ sessionStorage.setItem(k, JSON.stringify(v)); }catch(e){} }};
+const PREF = {consent: LS.get('vocabConsent', null), uid: null};   // consent: 'yes'｜'no'｜null（還沒選）
+function newUid(){ try{ const a = new Uint8Array(12); crypto.getRandomValues(a); return Array.from(a, b => b.toString(16).padStart(2, '0')).join(''); }catch(e){ return Array.from({length: 24}, () => Math.floor(Math.random() * 16).toString(16)).join(''); } }
+function prefLoad(){
+  let o = null;
+  if (PREF.consent === 'yes'){ try{ o = JSON.parse(CK.get(PCK)); }catch(e){} o = o || LS.get('vocabPrefs', null); PREF.uid = CK.get(UCK) || LS.get('vocabUid', null); }
+  else o = SS.get('vocabPrefsS');
+  if (!o && PREF.consent !== 'no') o = {count: LS.get('vocabGCount', null), speed: LS.get('vocabGSpeed', null), time: LS.get('vocabGTime', null), dens: LS.get('vocabGDens', null), bankN: LS.get('vocabGBankN', null)};
+  return o || {};
+}
+const GS = {count: 10, speed: 1, time: 60, dens: 1, bankN: 500};   // 預設值（面板一開始就選好）
+const GS_DEF = Object.assign({}, GS);
+function gsApply(o){ o = o || {};
+  if (COUNTS.includes(+o.count)) GS.count = +o.count; if (o.speed != null && +o.speed >= 0 && +o.speed <= 4) GS.speed = +o.speed | 0;
+  if (TIMES.includes(+o.time)) GS.time = +o.time; if (o.dens != null && +o.dens >= 0 && +o.dens <= 2) GS.dens = +o.dens | 0; if (BANKNS.includes(+o.bankN)) GS.bankN = +o.bankN; }
+gsApply(prefLoad());
+function prefSave(){
+  const o = {}; PREFKEYS.forEach(k => o[k] = GS[k]);
+  if (PREF.consent === 'yes'){ if (!PREF.uid) PREF.uid = newUid(); CK.set(PCK, JSON.stringify(o)); CK.set(UCK, PREF.uid); LS.set('vocabPrefs', o); LS.set('vocabUid', PREF.uid); }
+  else SS.set('vocabPrefsS', o);
+}
+function setConsent(v){
+  PREF.consent = v; LS.set('vocabConsent', v);
+  if (v === 'yes') prefSave();
+  else { CK.del(PCK); CK.del(UCK); ['vocabPrefs', 'vocabUid', 'vocabGCount', 'vocabGSpeed', 'vocabGTime', 'vocabGDens', 'vocabGBankN'].forEach(k => { try{ localStorage.removeItem(k); }catch(e){} }); PREF.uid = null; SS.set('vocabPrefsS', GS); }
+  ckBarUpdate(); if (state.view === 'quiz' && G == null && $('#gSetup')) gShowSetup(state.game);
+}
+function ckBarUpdate(){ const b = $('#ckBar'); if (b) b.classList.toggle('hidden', PREF.consent != null); document.body.classList.toggle('ckon', PREF.consent == null); ckBarSize(); }
+function ckBarSize(){ const b = $('#ckBar'); document.body.style.setProperty('--ckh', b && PREF.consent == null && b.offsetHeight ? b.offsetHeight + 'px' : '0px'); }
+window.addEventListener('resize', ckBarSize);
+function ckBarInit(){
+  if (!$('#ckBar')){ const d = document.createElement('div'); d.id = 'ckBar'; d.className = 'ckbar'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-label', 'Cookie 同意');
+    d.innerHTML = '<span class="ckt">🍪 可以用 Cookie 記住你的遊戲設定嗎？（只存設定和一個匿名的隨機編號，不含姓名）<\/span><span class="ckb"><button class="ckno" id="ckNo">不允許<\/button><button class="ckyes" id="ckYes">允許<\/button><\/span>'; document.body.appendChild(d);
+    $('#ckYes').onclick = () => { setConsent('yes'); toast('好的！已記住你的設定 🍪'); }; $('#ckNo').onclick = () => { setConsent('no'); toast('好的，只在這次使用，不會儲存'); }; }
+  ckBarUpdate();
+}
+ckBarInit();
+document.addEventListener('click', e => { if (e.target.closest('#ckReset')){ PREF.consent = null; LS.set('vocabConsent', null); try{ localStorage.removeItem('vocabConsent'); }catch(_){} ckBarUpdate(); } });
 function gSpd(){ return SPEEDS[GS.speed][1]; }
-function gSetCount(n){ if (COUNTS.includes(n)){ GS.count = n; LS.set('vocabGCount', n); } }
-function gSetTime(n){ if (TIMES.includes(n)){ GS.time = n; LS.set('vocabGTime', n); } }
-function gSetDens(k){ if (k >= 0 && k <= 2){ GS.dens = k | 0; LS.set('vocabGDens', GS.dens); } }
-function gSetBankN(n){ if (BANKNS.includes(n)){ GS.bankN = n; LS.set('vocabGBankN', n); } }
-function gSetSpeed(k){ if (k >= 0 && k <= 4){ GS.speed = k | 0; LS.set('vocabGSpeed', GS.speed); } }
+function gSetCount(n){ if (COUNTS.includes(n)){ GS.count = n; prefSave(); } }
+function gSetTime(n){ if (TIMES.includes(n)){ GS.time = n; prefSave(); } }
+function gSetDens(k){ if (k >= 0 && k <= 2){ GS.dens = k | 0; prefSave(); } }
+function gSetBankN(n){ if (BANKNS.includes(n)){ GS.bankN = n; prefSave(); } }
+function gSetSpeed(k){ if (k >= 0 && k <= 4){ GS.speed = k | 0; prefSave(); } }
 const GTIMED = {dino: 1, ninja: 1};   // 限時的遊戲
 function gSettingsHTML(){
   if (state.game === 'ket') return '';
@@ -1786,16 +1892,16 @@ function gSettingsHTML(){
   const grp = (cls, lab, ic, arr, cur, attr, fmt) => `<div class="gsgrp ${cls}" role="group" aria-label="${lab}"><span class="qbl">${ic} ${lab}<\/span>${arr.map((v, k) => `<button class="chip${cur(v, k) ? ' on' : ''}" data-${attr}="${attr === 'gs' || attr === 'gd' ? k : v}" aria-pressed="${cur(v, k)}">${fmt(v, k)}<\/button>`).join('')}<\/div>`;
   return `<div class="gset" id="gSet">
     ${tm ? grp('gtime', '時間', '⏱', TIMES, v => v === GS.time, 'gt', v => v + ' 秒') : grp('gcount', '題數', '📝', COUNTS, v => v === GS.count, 'gc', v => v)}
-    ${sp ? grp('gspeed', '速度', '⚡', SPEEDS, (v, k) => k === GS.speed, 'gs', v => v[0]) : ''}
-    ${state.game === 'dino' ? grp('gdens', '字的數量', '🍃', DENS, (v, k) => k === GS.dens, 'gd', v => v[0]) : ''}
+    ${sp ? grp('gspeed', '難度／速度', '⚡', SPEEDS, (v, k) => k === GS.speed, 'gs', v => v[0]) : ''}
+    ${tm ? grp('gdens', '字的數量', '🍃', DENS, (v, k) => k === GS.dens, 'gd', v => v[0]) : ''}
     ${tm ? grp('gbankn', '字池', '📚', BANKNS, v => v === GS.bankN, 'gn', v => v.toLocaleString() + ' 字') : ''}
   <\/div>`;
 }
 /* ---- 連擊（combo）與黃金：答對連續 2 題起，每題 +5，之後慢慢加到最多 +10；黃金題答對，基本分和連擊分都 ×2 ---- */
 function comboBonus(c){ return c >= 2 ? Math.min(10, 5 + (c - 2)) : 0; }
 const G_FONT = '"Avenir Next","Nunito","Segoe UI",system-ui,-apple-system,sans-serif';
-function gamePickerHTML(){
-  return `<div class="gpick" role="tablist" aria-label="選擇遊戲">${Object.entries(GAMES).map(([k, [ic, n]]) => `<button role="tab" aria-selected="${state.game === k}" class="${state.game === k ? 'on' : ''}" data-game="${k}"><span class="gic">${ic}<\/span><span class="gnm">${n}<\/span><\/button>`).join('')}<\/div>` + bankBarHTML() + gSettingsHTML();
+function gamePickerHTML(noBank){
+  return `<div class="gpick" role="tablist" aria-label="選擇遊戲">${Object.entries(GAMES).map(([k, [ic, n]]) => `<button role="tab" aria-selected="${state.game === k}" class="${state.game === k ? 'on' : ''}" data-game="${k}"><span class="gic">${ic}<\/span><span class="gnm">${n}<\/span><\/button>`).join('')}<\/div>` + (noBank ? '' : bankBarHTML()) + (GTIMED[state.game] ? '' : gSettingsHTML());
 }
 /* ---- 題庫來源設定（存在 localStorage） ---- */
 function bankBarHTML(){
@@ -1822,11 +1928,11 @@ $('#quizView').addEventListener('change', e => {
   const sel = $('#' + t.id); if (sel) try{ sel.focus({preventScroll: true}); }catch(_){}
 });
 function pickGame(k){ if (!GAMES[k]) return; state.game = k; LS.set('vocabGame', k); gUnlockAudio(); openQuiz(); }
-function openQuiz(){ stopGame(); if (state.game === 'ket') newQuestion(); else startGame(state.game); }
+function openQuiz(){ stopGame(); if (state.game === 'ket') newQuestion(); else if (GTIMED[state.game]) gShowSetup(state.game); else startGame(state.game); }
 $('#quizView').addEventListener('click', e => { const b = e.target.closest('[data-game]'); if (b) pickGame(b.dataset.game);
   const gx = e.target.closest('[data-gc],[data-gs],[data-gt],[data-gd],[data-gn]');
   if (gx){ const d = gx.dataset; if (d.gc != null) gSetCount(+d.gc); else if (d.gs != null) gSetSpeed(+d.gs); else if (d.gt != null) gSetTime(+d.gt); else if (d.gd != null) gSetDens(+d.gd); else gSetBankN(+d.gn);
-    const sel = Object.keys(d).map(k => `[data-${k}="${d[k]}"]`)[0]; openQuiz(); const f = $(sel); if (f) try{ f.focus({preventScroll: true}); }catch(_){} }
+    const sel = Object.keys(d).map(k => `[data-${k}="${d[k]}"]`)[0]; if (GTIMED[state.game]) gShowSetup(state.game, true); else openQuiz(); const f = $(sel); if (f) try{ f.focus({preventScroll: true}); }catch(_){} }
   const q = e.target.closest('[data-qd]'); if (q && !q.disabled){ setDiff(QB.diff + (+q.dataset.qd)); openQuiz(); const f = $('#' + q.id); if (f && !f.disabled) try{ f.focus({preventScroll: true}); }catch(_){} } });
 
 /* ---- 音效（WebAudio 小嗶聲，可關掉；不支援就安靜） ---- */
@@ -1902,29 +2008,45 @@ function gPromptHTML(it, spell){
 }
 
 /* ---- 共用：遊戲外框、迴圈、暫停 ---- */
-function stopGame(){ if (!G) return; G.stopped = true; cancelAnimationFrame(G.raf); if (G.ro) G.ro.disconnect(); $('#quizView').classList.remove('gaming'); G = null; }
+function stopGame(){ if (!G) return; G.stopped = true; cancelAnimationFrame(G.raf); if (G.ro) G.ro.disconnect(); $('#quizView').classList.remove('gaming'); document.body.classList.remove('gplay'); document.documentElement.classList.remove('gplay'); G = null; }
 function startGame(kind){
   stopGame(); QUIZ.gen++;
   const view = $('#quizView');
   const narrow = view.clientWidth < 620;
-  const nOpts = kind === 'spell' ? 0 : (narrow ? 3 : 4);
+  const nOpts = kind === 'spell' ? 0 : (kind === 'ninja' ? 4 : (narrow ? 3 : 4));
   const deck = kind === 'dino' ? dinoDeck() : gDeck(kind === 'ninja' ? 24 : GS.count, nOpts, kind === 'ninja' ? GS.bankN : 0); const {items, note} = deck;
   if (!items.length && kind !== 'dino'){ view.innerHTML = gamePickerHTML() + '<div class="card empty">暫時出不了題目，換個題庫試試！<\/div>'; return; }
   const [ic, name] = GAMES[kind];
   G = {kind, items, i: 0, score: 0, right: 0, combo: 0, maxCombo: 0, bd: {base: 0, combo: 0, gold: 0, bonus: 0, bonusHits: 0, pen: 0}, spd: gSpd(), nOpts, rounds: deck.rounds || null, timed: !!GTIMED[kind], limit: GS.time, left: GS.time, results: [], timers: [], t: 0, parts: [], floats: [], note, W: 0, H: 0, freeze: false, speedMul: 1, paused: false};
-  if (kind !== 'spell') view.classList.add('gaming');
-  view.innerHTML = gamePickerHTML() + `<div class="card gcard" data-gkind="${kind}">
-    <div class="ghead"><div class="gtitle"><span class="ic">${ic}<\/span>${name}<\/div>
-      <div class="gstat"><span class="gpill" id="gRound"><\/span><span class="gpill combo" id="gCombo" aria-live="polite"><\/span><span class="gpill star" id="gScore"><\/span><button class="gsmall" id="gMute" aria-label="音效開關">${SND.on ? '🔔' : '🔕'}<\/button><button class="gsmall" id="gSwitch" aria-label="換遊戲">🎮 換遊戲<\/button><\/div><\/div>
+  if (kind !== 'spell'){ view.classList.add('gaming'); document.body.classList.add('gplay'); document.documentElement.classList.add('gplay'); }
+  view.innerHTML = (kind === 'spell' ? gamePickerHTML() : '') + `<div class="card gcard${kind === 'spell' ? '' : ' gfull'}" data-gkind="${kind}">
+    <div class="ghead"><div class="gtitle"><span class="ic">${ic}<\/span><span class="gn">${name}<\/span><\/div>
+      <div class="gstat"><span class="gpill" id="gRound"><\/span><span class="gpill combo" id="gCombo" aria-live="polite"><\/span><span class="gpill star" id="gScore"><\/span><button class="gsmall" id="gMute" aria-label="音效開關">${SND.on ? '🔔' : '🔕'}<\/button><button class="gsmall" id="gSwitch" aria-label="回設定">${kind === 'spell' ? '🎮 換遊戲' : '⚙️ 設定'}<\/button><\/div><\/div>
     ${note ? `<div class="note warn gnote">${esc(note)}<\/div>` : ''}
     <div class="gprompt" id="gPrompt"><\/div>
     ${kind === 'spell' ? '<div id="gSpell"><\/div>' : `<div class="gstage" id="gStage"><canvas id="gCanvas" aria-label="${name}遊戲畫面"><\/canvas><div class="gmsg" id="gMsg"><\/div>${GTIMED[kind] ? '<div class="gclock" id="gClock" aria-live="off"><\/div><div class="gbanner" id="gBanner"><\/div>' : ''}<\/div><div class="gctrl" id="gCtrl"><\/div>`}
   <\/div>`;
   G.card = view.querySelector('.gcard');
   $('#gMute').onclick = () => { SND.on = !SND.on; LS.set('vocabGameSound', SND.on); $('#gMute').textContent = SND.on ? '🔔' : '🔕'; if (SND.on) blip('pop'); };
-  $('#gSwitch').onclick = () => { const p = view.querySelector('.gpick'); if (p) p.scrollIntoView({block: 'start', behavior: 'smooth'}); };
+  $('#gSwitch').onclick = () => { if (kind !== 'spell') return gShowSetup(kind); const p = view.querySelector('.gpick'); if (p) p.scrollIntoView({block: 'start', behavior: 'smooth'}); };
   if (kind === 'spell') spellInit(); else if (kind === 'ninja') ninjaInit(); else dinoInit();
-  G.card.scrollIntoView({block: 'start'});
+  if (kind === 'spell') G.card.scrollIntoView({block: 'start'});
+}
+function gSetupHTML(kind){
+  const [ic, name] = GAMES[kind];
+  const rules = kind === 'dino' ? '用左右鍵或手指拖曳，讓恐龍吃到和「目標字」意思很像（或相反）的字！每吃對 5 個字，目標字就會換新的。' : '看題目，瞄準後射中正確的英文字牌！每答對 5 題，題目會換一組新的。';
+  const sv = PREF.consent === 'yes' ? '💾 已儲存，下次自動套用' : PREF.consent === 'no' ? '⏳ 只在這次使用（沒有儲存）' : '💡 按下方的「允許」之後，設定就會被記住';
+  return `<div class="card gsetup" id="gSetup" data-gkind="${kind}">
+    <div class="gsu-head"><span class="gsu-ic">${ic}<\/span><div><div class="gsu-t">${name}<\/div><div class="gsu-s">${rules}<\/div><\/div><\/div>
+    ${gSettingsHTML()}
+    <div class="gsu-saved" id="gSaved">⚙️ 目前選擇：<b>${SPEEDS[GS.speed][0]}<\/b>・<b>${GS.time} 秒<\/b>・<b>${GS.bankN.toLocaleString()} 字<\/b>・字的數量<b>${DENS[GS.dens][0]}<\/b>　${sv}<\/div>
+    <button class="gstart" id="gStart" aria-label="開始遊戲"><span class="gsp">▶<\/span> START <small>開始！<\/small><\/button>
+  <\/div>`;
+}
+function gShowSetup(kind, keep){
+  stopGame(); const view = $('#quizView'); view.classList.remove('gaming'); view.innerHTML = gamePickerHTML(true) + gSetupHTML(kind) + bankBarHTML();
+  const b = $('#gStart'); if (b) b.onclick = () => { gUnlockAudio(); startGame(kind); };
+  if (!keep) { const el = $('#gSetup'); if (el && state.view === 'quiz') try{ el.scrollIntoView({block: 'nearest'}); }catch(_){} }
 }
 function gHud(){ if (!G) return; const r = $('#gRound'), s = $('#gScore'); if (r) r.textContent = G.kind === 'dino' ? dinoRoundText() : (G.timed ? `第 ${G.i + 1} 題` : `第 ${Math.min(G.i + 1, G.items.length)}／${G.items.length} 題`); if (s) s.textContent = `⭐ ${fmtN(G.score)} 分`;
   const cb = $('#gCombo'); if (cb){ const on = G.combo >= 2; cb.classList.toggle('show', on); const t = on ? `🔥 x${G.combo}` : ''; if (cb.textContent !== t){ cb.textContent = t; if (on){ cb.classList.remove('bump'); void cb.offsetWidth; cb.classList.add('bump'); } } } }
@@ -1969,7 +2091,7 @@ function gEnd(){
     ${dn ? dinoResultsHTML(g) : ''}<ul class="gres">${dn ? '' : g.results.map(x => `<li class="${x.ok ? 'ok' : 'no'}"><span>${x.ok ? '✅' : '💡'}<\/span><button class="en" data-look="${esc(x.w)}" data-nocount>${esc(x.answer)}<\/button><span class="zh">${esc(x.zh)}<\/span>${!x.ok && x.picked ? `<small>（你選了 <span class="en">${esc(x.picked)}<\/span>）<\/small>` : ''}<button class="btn sm" data-say="${esc(x.answer)}" aria-label="發音">🔊<\/button><\/li>`).join('')}<\/ul>
     <div class="gendbtns"><button class="btn primary" id="gAgain">🔁 再玩一次<\/button><button class="btn purple" id="gOther">🎮 換個遊戲<\/button><\/div>
   <\/div>`;
-  $('#gAgain').onclick = () => startGame(kind);
+  $('#gAgain').onclick = () => { if (GTIMED[kind]) gShowSetup(kind); else startGame(kind); };
   $('#gOther').onclick = () => { const p = view.querySelector('.gpick'); if (p) p.scrollIntoView({block: 'start', behavior: 'smooth'}); };
   view.querySelector('.gend').scrollIntoView({block: 'start'});
   blip('win');
@@ -1977,11 +2099,15 @@ function gEnd(){
 function gStageSize(){
   const g = G; if (!g || !g.cv) return; const st = $('#gStage'); if (!st) return;
   const w = Math.round(st.clientWidth); if (!w) return;
-  const wide = innerWidth >= 820; const panel = g.card.closest('.panel');
-  const visH = wide && panel ? panel.clientHeight : innerHeight;
-  const nonStage = g.card.offsetHeight - st.offsetHeight;
-  let h = visH - nonStage - (wide ? 20 : 16);
-  h = Math.round(Math.max(300, Math.min(h, 640, w * (wide ? .9 : 1.15))));
+  let h;
+  if (g.card.classList.contains('gfull')){ h = Math.round(st.clientHeight); if (h < 120) return; }   // 全螢幕遊戲：舞台就是剩下的空間
+  else {
+    const wide = innerWidth >= 820; const panel = g.card.closest('.panel');
+    const visH = wide && panel ? panel.clientHeight : innerHeight;
+    const nonStage = g.card.offsetHeight - st.offsetHeight;
+    h = visH - nonStage - (wide ? 20 : 16);
+    h = Math.round(Math.max(300, Math.min(h, 640, w * (wide ? .9 : 1.15))));
+  }
   if (w === g.W && h === g.H) return;
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   g.cv.width = Math.round(w * dpr); g.cv.height = Math.round(h * dpr); g.cv.style.height = h + 'px';
@@ -1991,7 +2117,7 @@ function gStageSize(){
 function gCanvasInit(){
   const g = G; g.cv = $('#gCanvas'); g.cx = g.cv.getContext('2d');
   gStageSize();
-  if ('ResizeObserver' in window){ let rw = 0; g.ro = new ResizeObserver(en => { const w = Math.round(en[0].contentRect.width); if (w === rw) return; rw = w; requestAnimationFrame(() => gStageSize()); }); g.ro.observe($('#gStage')); }
+  if ('ResizeObserver' in window){ let rw = 0, rh = 0; g.ro = new ResizeObserver(en => { const w = Math.round(en[0].contentRect.width), h = Math.round(en[0].contentRect.height); if (w === rw && h === rh) return; rw = w; rh = h; requestAnimationFrame(() => gStageSize()); }); g.ro.observe($('#gStage')); }
   const st = $('#gStage');
   st.addEventListener('touchmove', e => e.preventDefault(), {passive: false});
   st.addEventListener('contextmenu', e => e.preventDefault());
@@ -2147,14 +2273,14 @@ function ninjaKey(e, down){
   return false;
 }
 
-function ninjaGeom(){ const {W, H} = G; const r = Math.max(24, Math.min(42, W * .06, H * .075)); const valH = Math.max(34, H * .1); return {r, valH, rowY: [H * .215, H * .43, H * .645], lx: W / 2, ly: H - Math.max(34, H * .075), cy: H - Math.max(58, H * .15), amp: W * (G.targets.length === 3 ? .15 : .1)}; }
+function ninjaGeom(){ const {W, H} = G; const r = Math.max(24, Math.min(42, W * .06, H * .075)); const valH = Math.max(34, H * .1); return {r, valH, rowY: [H * .215, H * .43, H * .645], lx: W / 2, ly: H - Math.max(34, H * .075), cy: H - Math.max(58, H * .15), amp: W * (G.targets.length === 3 ? .15 : W < 480 ? .06 : .1)}; }
 
 function ninjaRound(){
   const g = G, it = g.items[g.i]; g.lock = false; g.shots = []; g.charging = false; g.charge = 0;
   $('#gPrompt').innerHTML = gPromptHTML(it); gHud(); gMsg('');
   g.old = (g.old || []).concat((g.targets || []).filter(t => t.dead));   // 被打中的靶繼續下沉，不會突然消失
   const n = it.opts.length;
-  const slots = n >= 4 ? [[.17, 2], [.83, 2], [.37, 1], [.63, 1]] : [[.2, 2], [.8, 2], [.5, 1]];   // 第 1 排是最上面的輸送帶；第 2、3 排的靶全部都會左右移動
+  const slots = n >= 4 ? [[.17, 2], [.83, 2], [.3, 1], [.7, 1]] : [[.2, 2], [.8, 2], [.5, 1]];   // 第 1 排是最上面的輸送帶；第 2、3 排的靶全部都會左右移動
   const order = shuffle(it.opts.slice(0, slots.length));
   g.targets = order.map((w, k) => ({w, ok: w === it.answer, kind: Math.floor(Math.random() * 4), face: null, sink: 0, hitT: 0, fx: slots[k][0], row: slots[k][1], move: 1, dir: k % 2 ? 1 : -1, ph: k * 1.7, x: 0, y: 0, shake: 0, pop: 0, glow: 0, dead: false}));
   g.phase = Math.random() * 6; ninjaPlace(); if (g.belt) ninjaRelabel();
@@ -2174,7 +2300,7 @@ function ninjaBeltAdd(g, ge, x, forceOk){
   const ok = !!forceOk || (nOk < ninjaBeltOkCap(g) && Math.random() < (g.bonus ? .55 : .4));
   g.belt.push({w: ninjaBeltWord(g, ok), ok, kind: Math.floor(Math.random() * 4), face: null, sink: 0, hitT: 0, x, y: ge.rowY[0], row: 0, ph: Math.random() * 6, shake: 0, pop: 0, glow: 0, dead: false, belt: true});
 }
-function ninjaBeltSpacing(ge){ return (ge.r * 3.1 + 34) * (G.bonus ? .66 : 1); }
+function ninjaBeltSpacing(ge){ const dm = [1.3, 1, .8][GS.dens] || 1; return Math.min((ge.r * 3.1 + 34) * dm, G.W / 3.4) * (G.bonus ? .66 : 1); }   // 字的數量：少／中／多；但畫面上輸送帶至少 3 個字
 function ninjaBeltFill(){ const g = G, ge = ninjaGeom(); const sp = ninjaBeltSpacing(ge); g.belt = []; for (let x = sp * .5; x < g.W; x += sp * (1 + Math.random() * .3)) ninjaBeltAdd(g, ge, x); ninjaRelabel(); g.nextGap = sp; }
 function ninjaRelabel(){   // 換題時：輸送帶上的字牌換成新題的字（正確答案只有 1 個，加分時間最多 2 個）
   const g = G; const live = g.belt.filter(t => !t.dead);
@@ -2558,23 +2684,23 @@ function dinoInit(){
 }
 /* ---- 幾何：恐龍連續左右移動，左右兩邊各有一座小山擋住（純函式，測試也會直接用）---- */
 function dinoGeomOf(W, H, k, bonus){
-  const gy = H - Math.max(26, H * .08); const ds = Math.min(W * .2, H * .27, 128); const mw = Math.max(40, Math.min(96, W * .08));
+  const gy = H - Math.max(26, H * .08); const ds = Math.min(W * (W < 480 ? .17 : .2), H * (H < 420 ? .2 : .27), 128); const mw = Math.max(40, Math.min(96, W * .08));
   const px0 = mw, px1 = W - mw; const vf = dinoFallV(H, k, bonus, 1);
-  return {W, H, gy, ds, dinoW: ds * .9, hw: ds * .32, mw, px0, px1, c0: px0 + ds * .3, c1: px1 - ds * .3, hitTop: gy - ds * 1.02, hitBot: gy - ds * .35, mouthY: gy - ds * .82, fs: Math.round(Math.max(15, Math.min(22, ds * .19))), vmax: dinoVmaxOf(W, k, bonus), vf, tFall: (gy + 44) / vf};
+  return {W, H, gy, ds, dinoW: ds * .9, hw: ds * .32, mw, px0, px1, c0: px0 + ds * .3, c1: px1 - ds * .3, hitTop: gy - ds * 1.02, hitBot: gy - ds * .35, mouthY: gy - ds * .82, fs: Math.round(Math.max(14, Math.min(22, ds * .19))), vmax: dinoVmaxOf(W, k, bonus), vf, tFall: (gy + 44) / vf};
 }
 function dinoGeom(){ return dinoGeomOf(G.W, G.H, GS.speed, G.bonus); }
 // 每一級掉落速度都是原本的 3 倍；恐龍最大水平速度也跟著等級變快，每一級都躲得掉
 function dinoFallV(H, k, bonus, mul){ return H / 11 * SPEEDS[k][1] * 3 * (bonus ? 2 : 1) * (mul || 1); }
-function dinoVmaxOf(W, k, bonus){ return W * .55 * Math.sqrt(SPEEDS[k][1] / .7) * (bonus ? 1.25 : 1); }
+function dinoVmaxOf(W, k, bonus){ return W * .66 * Math.pow(SPEEDS[k][1] / .7, .7) * (bonus ? 1.25 : 1); }
 function dinoV(){ return dinoFallV(G.H, GS.speed, G.bonus, G.speedMul); }
 let DINO_MC = null;
 function dinoTextW(text, fs){ DINO_MC = DINO_MC || document.createElement('canvas').getContext('2d'); DINO_MC.font = `800 ${fs}px ${G_FONT}`; return DINO_MC.measureText(text).width; }
-function dinoBwOf(text, ge){ return Math.min(Math.min(ge.W * .36, 190), dinoTextW(text, ge.fs) + 30); }
+function dinoBwOf(text, ge){ return Math.min(Math.min(ge.W * .36, 190), dinoTextW(text, ge.fs) + 24); }
 /* ---- 出字排程（scheduler）：一次掉一「排」字（1～4 個）。
    1) 同一排左右相鄰的字，中心距離至少 = 1.6 × 恐龍寬度 + 字牌寬度（中間一定有讓恐龍通過的縫）。
    2) 從畫面上任何位置出發，恐龍都要在「這一排掉到之前」走得到縫：最遠要走的距離 ≤ 恐龍速度 × (兩排間隔時間 − 通過時間) × 0.7，
       而且 ≤ 恐龍速度 × 字掉下來的時間 × 0.5（掉落時間 × 恐龍速度 ≥ 需要走的距離）。不夠就等一下再出。 ---- */
-const DBAND = [.6, .4, .27, .2];   // 兩排之間的距離（畫面高度的比例）：少／中／多／加分時間
+const DBAND = [.29, .25, .2, .2];   // 兩排之間的距離（畫面高度的比例）：少／中／多／加分時間
 function dinoGap(ge){ return 1.6 * ge.dinoW; }
 function dinoLayout(ge, bws, rnd){   // 由左到右排好 k 個字的中心 x；排不下就回 null
   const k = bws.length, gap = dinoGap(ge); let minSpan = 0; for (let i = 0; i + 1 < k; i++) minSpan += gap + (bws[i] + bws[i + 1]) / 2;
@@ -2610,12 +2736,16 @@ function dinoSearch(ge, k0, tau, minIv, vf, gen, rnd){
   return null;
 }
 function dinoWaveK(ge, dens, rnd){   // 這一排要放幾個字（依「字的數量」少／中／多）
-  const r = (rnd || Math.random)(); const avg = 7 * ge.fs * .58 + 30; const kmax = Math.max(1, Math.min(4, Math.floor((ge.px1 - ge.px0 - avg) / (dinoGap(ge) + avg)) + 1));
-  if (dens === 0) return kmax >= 2 && r < .2 ? 2 : 1;
-  if (dens === 1) return kmax >= 3 && r < .25 ? 3 : kmax >= 2 && r < .75 ? 2 : 1;
-  return kmax >= 2 ? (r < .7 ? kmax : kmax - 1) : 1;
+  const r = (rnd || Math.random)(); const avg = 7 * ge.fs * .58 + 24; const kmax = Math.max(1, Math.min(4, Math.floor((ge.px1 - ge.px0 - avg) / (dinoGap(ge) + avg)) + 1));
+  // 一次進來 2～3 個字（畫面太窄就 2 個）：畫面上隨時都有 5 個以上的字
+  if (kmax < 2) return 1;
+  if (ge.H < 420 && kmax >= 3) return 3;   // 矮矮的橫放畫面：每排 3 個，才不會有空檔
+  if (dens === 0) return kmax >= 3 && r < .3 ? 3 : 2;
+  if (dens === 1) return kmax >= 3 && r < .6 ? 3 : 2;
+  return kmax >= 3 ? (r < .8 ? 3 : 2) : 2;
 }
 
+function dinoBoostK(ge, k0, vis){ return vis <= 4 ? Math.max(k0, Math.min(3, dinoWaveK(ge, 2, () => .5))) : k0; }   // 畫面上的字太少 → 這一排多放一個
 function dinoKinds(k, inflight, rnd, bonus){
   const r = rnd || Math.random; const pg = bonus ? .5 : .4; const ng = () => r() < .4 ? 'bad' : 'none'; const out = [];
   if (k >= 2){ out.push('good', ng()); for (let i = 2; i < k; i++) out.push(r() < pg ? 'good' : ng()); }
@@ -2639,12 +2769,18 @@ function dinoWaveTry(){   // 回傳 true = 這一排出去了
   const nx = g.bplan[g.bidx], el = g.limit - g.left; const soon = g.bonus || (nx && nx.s - el < geN.tFall + .5);
   const vW = soon ? dinoFallV(g.H, GS.speed, true, g.speedMul) : vNow; const tauEff = g.sch.tau * vNow / vW; const dens = g.bonus ? 2 : GS.dens;
   const fall = g.words.filter(w => w.state === 'fall'); const inflight = {good: fall.some(w => w.good), nongood: fall.some(w => !w.good)};
-  const k0 = dinoWaveK(geN, dens), ge = dinoGeom();
+  const visN = fall.filter(w => w.y > -12 && w.y < geN.gy).length; const k0 = dinoBoostK(geN, dinoWaveK(geN, dens), visN), ge = dinoGeom();
   const res = dinoSearch(geN, k0, tauEff, DBAND[g.bonus ? 3 : dens] * g.H / vW, vW, kk => { const kinds = dinoKinds(kk, inflight, null, g.bonus); const its = dinoPickWords(g, kinds); return its && {its, bws: its.map(it => dinoBwOf(it.w, ge)), wrong: its.map(it => it.rel !== rd.mode)}; });
   if (!res) return false;
   const its = res.c.its, plan = res.plan, bws = res.c.bws; const cols = ['#ffd6e7', '#fff1b8', '#d4f5e4', '#dcecff', '#ece2ff'];
   its.forEach((it, i) => { g.words.push({w: it.w, zh: it.zh, rel: it.rel, good: it.rel === rd.mode, bad: it.rel !== 'none' && it.rel !== rd.mode, x: plan.xs[i], bw: bws[i], y: -30, col: cols[(g.nwords = (g.nwords || 0) + 1) % cols.length], state: 'fall', a: 1, wob: Math.random() * 6}); rd.shown[it.w] = (rd.shown[it.w] || 0) + 1; g.rounds[rd.r].shown[it.w] = 1; });
   g.sch.tau = 0; g.waves = (g.waves || 0) + 1; return true;
+}
+function dinoPrefill(){   // 一開始（或換題後）畫面上就已經有一整串字在往下掉，不用等
+  const g = G; if (!g || !g.rd) return; const ge = dinoGeom(), v = dinoV(); const band = DBAND[g.bonus ? 3 : GS.dens] * g.H; const n = Math.max(1, Math.floor((ge.hitTop - 90) / band) + 1);
+  g.words.forEach(w => { if (w.state === 'fall') w.state = 'fade'; });
+  for (let i = 0; i < n; i++){ g.sch.tau = Math.max(g.sch.tau, 99); if (!dinoWaveTry()) break; g.words.forEach(w => { if (w.state === 'fall') w.y += band; }); }
+  g.sch.tau = band / v;
 }
 function gBanner(html, secs, cls){
   const b = $('#gBanner'); if (!b) return; b.innerHTML = html; b.className = 'gbanner show ' + (cls || ''); const tok = b._tok = (b._tok || 0) + 1;
@@ -2654,7 +2790,7 @@ function dinoSwitch(first){   // 換目標字（模式也跟著換：同義字 �
   const g = G; const prev = g.rounds[g.rounds.length - 1]; const R = dinoMakeRound(g, prev ? (prev.mode === 'syn' ? 'ant' : 'syn') : (Math.random() < .5 ? 'syn' : 'ant'));
   g.rounds.push(R); g.ri = g.rounds.length - 1; g.i = g.ri; g.words.forEach(w => { if (w.state === 'fall') w.state = 'fade'; });
   g.rd = {r: g.ri, mode: R.mode, sup: R.sup, shown: R.shown, t: 0, win: 30 + Math.random() * 6, need: 5, phase: first === true ? 'intro' : 'play', pt: first === true ? 1.9 : 0};
-  g.sch.tau = first === true ? 0 : 99;
+  g.sch.tau = first === true ? 0 : 99; dinoPrefill();
   const [ic, nm, ds] = DMODE[R.mode];
   $('#gPrompt').innerHTML = `<div class="dprompt"><span class="dlabel">🎯 目標字<\/span><b class="dt en">${esc(R.target)}<\/b><span class="dtz">${esc(R.tzh)}<\/span><span class="dmode ${R.mode}">${ic} ${nm}<\/span><\/div><div class="dsub">只吃<b>${ds}<\/b>：吃對 <b class="p">+1<\/b>・吃到相反的 <b class="m">−1<\/b>・不相關的字會 <b class="z">⚡ 電到<\/b>（不扣分，但會變慢 0.5 秒）<\/div>`;
   const pr = $('#gPrompt'); pr.classList.remove('flash'); void pr.offsetWidth; pr.classList.add('flash');
@@ -2859,6 +2995,8 @@ window.__game = {
   dinoRounds: () => G && G.rounds ? G.rounds.map(r => ({target: r.target, mode: r.mode, syn: r.syn, ant: r.ant})) : null,
   next(){ if (G && G.kind === 'dino') dinoSkipRound(); else if (G){ G.timers = []; gNext(); } },
   last: () => G_LAST,
+  toSetup: () => { if (GTIMED[state.game]) gShowSetup(state.game, true); },
+  prefs: () => ({consent: PREF.consent, uid: PREF.uid, cookie: document.cookie, ls: LS.get('vocabPrefs', null), lsUid: LS.get('vocabUid', null), ss: SS.get('vocabPrefsS')}),
   settings: () => ({count: GS.count, speed: GS.speed, time: GS.time, dens: GS.dens, bankN: GS.bankN}),
   bankInfo: n => { const T = topPool(dinoBankKey(), QB.diff, n), T5 = topPool(dinoBankKey(), QB.diff, 500), T1 = topPool(dinoBankKey(), QB.diff, 1000); const sc = T.list.reduce((a, w) => a + wordScore(w), 0) / T.list.length; const tg = dinoPool().filter(x => T.set.has(x.w)).length; return {n: T.n, avg: sc, list: n === 500 ? T.list : [], nested: n === 500 ? T.list.every(w => T1.set.has(w)) : n === 1000 ? T.list.every(w => topPool(dinoBankKey(), QB.diff, 3000).set.has(w)) : true, targets: tg}; },
   flipBelt: () => { if (G) G.bflip = 0; },
@@ -2886,20 +3024,23 @@ function dinoSim(k, dens, o){
   const R = {W, H, k, dens, bonus, ge: {dinoW: ge.dinoW, vmax: ge.vmax, vf, tFall: ge.tFall, c0: ge.c0, c1: ge.c1, px0: ge.px0, px1: ge.px1, hw: ge.hw}, waves: 0, words: 0, violations: 0, unreachable: 0, travelViol: 0, minRatio: 99, maxNeed: 0, minGapPx: 1e9, minSlack: 1e9, time: 0, kCount: {}, wait: 0, noGood: 0, noWrong: 0, cant: 0};
   const minIv = DBAND[bonus ? 3 : dens] * H / vf; let t = 0; if (bonus) dens = 2;
   for (let n = 0; n < N; n++){
-    const k0 = dinoWaveK(ge, dens, rnd); let res = null, tau = minIv;
+    const visN = (R.wt || []).reduce((a, [tw, k]) => { const y = -30 + (t - tw) * vf; return a + (t >= tw && y > -12 && y < ge.gy ? k : 0); }, 0); const k0 = dinoBoostK(ge, dinoWaveK(ge, dens, rnd), visN); let res = null, tau = minIv;
     for (let guard = 0; guard < 4000 && !res; guard++){
       res = dinoSearch(ge, k0, tau, minIv, vf, kk => { const kinds = dinoKinds(kk, {good: true, nongood: true}, rnd); return {kinds, bws: kinds.map(() => dinoBwOf('a'.repeat(3 + Math.floor(rnd() * 8)), ge)), wrong: kinds.map(x => x !== 'good')}; }, rnd);
       if (!res) tau += 1 / 30;
     }
     R.wait += tau - minIv; t += tau; if (!res){ R.cant++; continue; }
     const {plan, c} = res, bws = c.bws; R.kCount[res.kk] = (R.kCount[res.kk] || 0) + 1;
-    R.waves++; R.words += bws.length; R.maxNeed = Math.max(R.maxNeed, plan.need);
+    R.waves++; R.words += bws.length; (R.wt = R.wt || []).push([t, bws.length]); R.maxNeed = Math.max(R.maxNeed, plan.need);
     if (bws.length >= 2 && !c.kinds.includes('good')) R.noGood++; if (bws.length >= 2 && !c.kinds.some(x => x !== 'good')) R.noWrong++;
     for (let i = 0; i + 1 < bws.length; i++){ const d = plan.xs[i + 1] - plan.xs[i], req = gap + (bws[i] + bws[i + 1]) / 2; R.minRatio = Math.min(R.minRatio, d / req); R.minGapPx = Math.min(R.minGapPx, d - (bws[i] + bws[i + 1]) / 2); if (d < req - 1e-6) R.violations++; }
     if (plan.need > dinoReach(ge, tau, vf) + 1e-6) R.unreachable++;
     if (!(ge.tFall * ge.vmax >= plan.need)) R.travelViol++;
     R.minSlack = Math.min(R.minSlack, ge.tFall * ge.vmax / Math.max(1, plan.need));
   }
+  // 畫面上同時看得到幾個字（從第 1 排掉到底之後開始算）：算最少和平均
+  const wt = R.wt || [], fillT = (ge.gy + 30) / vf, vis = []; for (let T = fillT; T < t - 1; T += .05){ let n = 0; for (const [tw, k] of wt){ const y = -30 + (T - tw) * vf; if (T >= tw && y >= 0 && y <= ge.gy) n += k; } vis.push(n); }
+  R.minVis = vis.length ? Math.min(...vis) : 0; R.lowFrac = vis.length ? vis.filter(n => n < 5).length / vis.length : 0; R.avgVis = vis.length ? vis.reduce((a, b) => a + b, 0) / vis.length : 0; delete R.wt;
   R.time = t; R.wordsPerSec = R.words / t; R.wavesPerSec = R.waves / t; R.gapNeed = gap; return R;
 }
 </script>
