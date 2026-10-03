@@ -1710,7 +1710,8 @@ function lookedWords(){ return quizPool().filter(x => /^[a-z]{2,}$/.test(x.w)); 
 // 實際使用的題庫（「只考我查過的字」但查不到 4 個字時，用 KET 字補）
 function effBank(){ return QB.bank === 'mine' && lookedWords().length < 4 ? 'ket' : QB.bank; }
 // 干擾選項：同一個題庫（只考查過的字時沿用原本的等級規則）
-function disBank(){ const k = effBank(); return k === 'mine' ? null : QB.diff ? diffPool(k, QB.diff).set : bankSet(k); }
+let GDIS = null;   // v8：忍者／恐龍出題時，干擾選項只從遊戲字池（國中程度的實詞）挑
+function disBank(){ if (GDIS) return GDIS; const k = effBank(); return k === 'mine' ? null : QB.diff ? diffPool(k, QB.diff).set : bankSet(k); }
 function setBank(bank, boost){ if (bank && QBANKS[bank]){ QB.bank = bank; LS.set('vocabQBank', bank); } if (boost != null){ QB.boost = !!boost; LS.set('vocabQBoost', QB.boost); } }
 const QRKEY = 'vocabQRecent_v1'; let QRECENT = LS.get(QRKEY, []); if (!Array.isArray(QRECENT)) QRECENT = [];
 function qRemember(ws){ ws = ws.filter(Boolean); QRECENT = QRECENT.filter(x => !ws.includes(x)).concat(ws).slice(-80); LS.set(QRKEY, QRECENT); }
@@ -1851,7 +1852,7 @@ function prefLoad(){
   if (!o && PREF.consent !== 'no') o = {count: LS.get('vocabGCount', null), speed: LS.get('vocabGSpeed', null), time: LS.get('vocabGTime', null), dens: LS.get('vocabGDens', null), bankN: LS.get('vocabGBankN', null)};
   return o || {};
 }
-const GS = {count: 10, speed: 1, time: 60, dens: 1, bankN: 500};   // 預設值（面板一開始就選好）
+const GS = {count: 10, speed: 1, time: 60, dens: 1, bankN: 1000};   // 預設值（面板一開始就選好）
 const GS_DEF = Object.assign({}, GS);
 function gsApply(o){ o = o || {};
   if (COUNTS.includes(+o.count)) GS.count = +o.count; if (o.speed != null && +o.speed >= 0 && +o.speed <= 4) GS.speed = +o.speed | 0;
@@ -1951,6 +1952,43 @@ function blip(kind){
 }
 function gSay(w){ try{ if ('speechSynthesis' in window) speak(w); }catch(e){} }
 
+/* ---- v8：遊戲字池 = 國中程度的「實詞」（名詞／動詞／形容詞／副詞），至少 4 個字母；代名詞、冠詞、介系詞、連接詞、助動詞、數字、疑問詞…都不出現在題目和選項裡 ---- */
+const FUNC_WORDS = new Set((
+  'it he she we they you me him her us them my your his its our their mine yours hers ours theirs this that these those myself yourself himself herself itself ourselves yourselves themselves oneself ' +
+  'who whom whose which what whatever whoever whenever wherever whichever something anything everything nothing someone anyone everyone nobody somebody anybody everybody ' +
+  'the a an some any every each all both either neither another other others such same enough several plenty many much more most less least few fewer little own ' +
+  'about above across after against along among around before behind below beneath beside besides between beyond despite down during except from inside into near onto opposite outside over past since through throughout toward towards under underneath until upon with within without via per like unlike ' +
+  'and but or nor so because although though unless whether while whereas however therefore otherwise moreover nevertheless whenever wherever ' +
+  'be am is are was were been being do does did done doing have has had having will would shall should can could may might must ought need dare ' +
+  'very too also just only even still yet already ever never always often sometimes usually here there then than when where why how not now once twice again away back off out up quite rather almost really maybe perhaps else instead together ' +
+  'zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty thirty forty fifty sixty seventy eighty ninety hundred thousand million billion first second third fourth fifth ' +
+  'hello hi oh yes yeah please thanks thank okay hey wow ah aha well ' +
+  'january february march april may june july august september october november december monday tuesday wednesday thursday friday saturday sunday').split(/\s+/));
+const GPOS_OK = new Set(['n', 'v', 'adj', 'adv']);
+const gPosParts = pos => String(pos || '').replace(/\./g, '').split('/').map(x => x.trim());
+function gContentOk(w, minLen){   // 實詞：不是功能字、詞性有名詞／動詞／形容詞／副詞，長度 ≥ minLen（預設 4）
+  if (!/^[a-z]+$/.test(w) || w.length < (minLen || 4) || FUNC_WORDS.has(w) || KID_SKIP.has(w)) return false;
+  const poss = DICT[w] ? DICT[w].m.map(m => m[0]) : lexSenses(w).map(x => x.pos);
+  return poss.some(p => gPosParts(p).some(x => GPOS_OK.has(x)));
+}
+let GPOOLS = {};
+function gBankKey(){ const k = effBank(); return k === 'ket' || k === 'mine' ? 'jh' : k; }   // 預設的 KET／查過的字 → 遊戲改用國中 2000 字
+function gamePool(){
+  const k = gBankKey(), key = [k, QB.diff, GS.bankN].join('|'); if (GPOOLS[key]) return GPOOLS[key];
+  const rank = (a, b) => wordScore(a) - wordScore(b);
+  const base = bankWords(k).filter(w => gContentOk(w)).sort(rank); const skip = Math.min(QB.diff * DIFF_STEP, Math.floor(base.length * .5));
+  let list = base.slice(skip, skip + GS.bankN); const have = new Set(base);
+  if (list.length < GS.bankN) list = list.concat(quizableWords().filter(w => !have.has(w) && gContentOk(w)).sort(rank).slice(0, GS.bankN - list.length));
+  return GPOOLS[key] = {list, set: new Set(list), key: k};
+}
+function gSample(n){   // 從遊戲字池抽 n 個不重複的字（最近出過的先避開；勾「查過的字多出幾次」→ 約 35% 是查過的字）
+  const P = gamePool(); const recent = new Set(QRECENT.slice(-Math.min(40, P.list.length >> 1)));
+  const lk = QB.boost ? shuffle(lookedWords().map(x => x.w).filter(w => P.set.has(w) && !recent.has(w))) : [];
+  const rest = shuffle(P.list.filter(w => !recent.has(w))); const out = [], seen = new Set();
+  while (out.length < n && (lk.length || rest.length)){ const w = lk.length && (Math.random() < .35 || !rest.length) ? lk.pop() : rest.pop(); if (!seen.has(w)){ seen.add(w); out.push(w); } }
+  return out;
+}
+
 /* ---- 出題：沿用小測驗的選字邏輯（星星多、答錯多的字比較常出現） ---- */
 function gZh(w){
   const e = DICT[w]; let z = e ? e.m[0][1] : ((lexSenses(w)[0] || {}).zh || glossOf(w) || '');
@@ -1988,14 +2026,18 @@ function gItem(w, nOpts, wantCloze){
 }
 function gDeck(n, nOpts, top){
   // 從題庫抽字（一回合 8 題不重複、最近出過的字先避開）；做不出題目的字就換下一個
-  const {words} = bankSample(n + 12, top ? {top} : undefined);   // 「查過的字不到 4 個」之類的提示已經顯示在題庫設定列
+  const game = !!top;   // 忍者：用遊戲字池（國中程度的實詞）
+  const words = game ? gSample(n + 12) : bankSample(n + 12).words;   // 「查過的字不到 4 個」之類的提示已經顯示在題庫設定列
   const items = [];
-  for (const w of words){
-    if (items.length >= n) break;
-    if (items.length && items[items.length - 1].w === w) continue;
-    let it = null; try{ it = gItem(w, nOpts, Math.random() < .5); }catch(err){ console.warn(err); }
-    if (it) items.push(it);
-  }
+  if (game) GDIS = gamePool().set;
+  try{
+    for (const w of words){
+      if (items.length >= n) break;
+      if (items.length && items[items.length - 1].w === w) continue;
+      let it = null; try{ it = gItem(w, nOpts, Math.random() < .5); }catch(err){ console.warn(err); }
+      if (it) items.push(it);
+    }
+  } finally { GDIS = null; }
   qRemember(items.map(x => x.w));
   return {items, note: ''};
 }
@@ -2013,7 +2055,7 @@ function startGame(kind){
   stopGame(); QUIZ.gen++;
   const view = $('#quizView');
   const narrow = view.clientWidth < 620;
-  const nOpts = kind === 'spell' ? 0 : (kind === 'ninja' ? 4 : (narrow ? 3 : 4));
+  const nOpts = kind === 'spell' ? 0 : (kind === 'ninja' ? 6 : (narrow ? 3 : 4));
   const deck = kind === 'dino' ? dinoDeck() : gDeck(kind === 'ninja' ? 24 : GS.count, nOpts, kind === 'ninja' ? GS.bankN : 0); const {items, note} = deck;
   if (!items.length && kind !== 'dino'){ view.innerHTML = gamePickerHTML() + '<div class="card empty">暫時出不了題目，換個題庫試試！<\/div>'; return; }
   const [ic, name] = GAMES[kind];
@@ -2273,16 +2315,16 @@ function ninjaKey(e, down){
   return false;
 }
 
-function ninjaGeom(){ const {W, H} = G; const r = Math.max(24, Math.min(42, W * .06, H * .075)); const valH = Math.max(34, H * .1); return {r, valH, rowY: [H * .215, H * .43, H * .645], lx: W / 2, ly: H - Math.max(34, H * .075), cy: H - Math.max(58, H * .15), amp: W * (G.targets.length === 3 ? .15 : W < 480 ? .06 : .1)}; }
+function ninjaGeom(){ const {W, H} = G; const r = Math.max(24, Math.min(42, W * .06, H * .075)); const valH = Math.max(34, H * .1); return {r, valH, rowY: [H * .215, H * .43, H * .645], lx: W / 2, ly: H - Math.max(34, H * .075), cy: H - Math.max(58, H * .15), amp: W * (G.targets.length === 3 ? .15 : G.targets.length >= 6 ? (W < 480 ? .045 : .08) : W < 480 ? .06 : .1)}; }
 
 function ninjaRound(){
   const g = G, it = g.items[g.i]; g.lock = false; g.shots = []; g.charging = false; g.charge = 0;
   $('#gPrompt').innerHTML = gPromptHTML(it); gHud(); gMsg('');
   g.old = (g.old || []).concat((g.targets || []).filter(t => t.dead));   // 被打中的靶繼續下沉，不會突然消失
   const n = it.opts.length;
-  const slots = n >= 4 ? [[.17, 2], [.83, 2], [.3, 1], [.7, 1]] : [[.2, 2], [.8, 2], [.5, 1]];   // 第 1 排是最上面的輸送帶；第 2、3 排的靶全部都會左右移動
+  const slots = n >= 6 ? [[.18, 1], [.5, 1], [.82, 1], [.18, 2], [.5, 2], [.82, 2]] : n >= 4 ? [[.17, 2], [.83, 2], [.3, 1], [.7, 1]] : [[.2, 2], [.8, 2], [.5, 1]];   // 第 1 排是最上面的輸送帶；第 2、3 排（下方 6 個看板）全部都會左右移動；同一排的看板同步移動，不會互相撞在一起
   const order = shuffle(it.opts.slice(0, slots.length));
-  g.targets = order.map((w, k) => ({w, ok: w === it.answer, kind: Math.floor(Math.random() * 4), face: null, sink: 0, hitT: 0, fx: slots[k][0], row: slots[k][1], move: 1, dir: k % 2 ? 1 : -1, ph: k * 1.7, x: 0, y: 0, shake: 0, pop: 0, glow: 0, dead: false}));
+  g.targets = order.map((w, k) => ({w, ok: w === it.answer, kind: Math.floor(Math.random() * 4), face: null, sink: 0, hitT: 0, fx: slots[k][0], row: slots[k][1], move: 1, dir: n >= 6 ? (slots[k][1] === 1 ? 1 : -1) : (k % 2 ? 1 : -1), ph: n >= 6 ? 1.7 : k * 1.7, x: 0, y: 0, shake: 0, pop: 0, glow: 0, dead: false}));
   g.phase = Math.random() * 6; ninjaPlace(); if (g.belt) ninjaRelabel();
 }
 
@@ -2309,7 +2351,7 @@ function ninjaRelabel(){   // 換題時：輸送帶上的字牌換成新題的�
   live.forEach(t => { t.ok = okSet.has(t); t.w = ninjaBeltWord(g, t.ok); });
 }
 function ninjaBeltUpdate(g, dt, ge){
-  const spd = Math.max(g.W * .14, 110) * g.spd * (g.bonus ? 2 : 1);
+  const spd = Math.max(g.W * .14, 110) * g.spd * (g.bonus ? g.bsp : 1);
   g.bflip -= dt; if (g.bflip <= 0){ g.bdir *= -1; g.bflip = 8 + Math.random() * 5; gFloat(g.W / 2, ge.rowY[0] + ge.r * 1.5, g.bdir < 0 ? '◀◀ 換方向：往左跑' : '換方向：往右跑 ▶▶', '#fff'); }
   g.bv += (g.bdir * spd - g.bv) * Math.min(1, dt * 2.2); g.boff += g.bv * dt;
   g.belt.forEach(t => { if (!t.dead) t.x += g.bv * dt; });
@@ -2334,7 +2376,7 @@ function ninjaUpdate(dt){
   if (g.rot) g.angle = Math.max(-1.2, Math.min(1.2, g.angle + g.rot * 1.0 * dt));
   if (g.charging) g.charge = Math.min(1, g.charge + dt / 1.1);
   const fb = $('#gFire'); if (fb) fb.style.setProperty('--p', g.charge.toFixed(3));
-  if (!g.freeze){ if (g.trans){ gTransTick(g, dt); bonusTick(g, dt, true); } else { g.left = Math.max(0, g.left - dt); bonusTick(g, dt); g.mt = (g.mt || 0) + dt * .85 * g.spd * (g.bonus ? 2 : 1); ninjaBeltUpdate(g, dt, ge); } }
+  if (!g.freeze){ if (g.trans){ gTransTick(g, dt); bonusTick(g, dt, true); } else { g.left = Math.max(0, g.left - dt); bonusTick(g, dt); g.mt = (g.mt || 0) + dt * .85 * g.spd * (g.bonus ? g.bsp : 1); ninjaBeltUpdate(g, dt, ge); } }
   ninjaPlace();
   g.old = (g.old || []).filter(t => t.hitT < 1.8); g.old.forEach(t => { t.hitT += dt; t.shake = Math.max(0, t.shake - dt * 1.6); t.sink = Math.max(0, Math.min(1, (t.hitT - .55) / .8)); });
   ninjaAll().forEach(t => { t.shake = Math.max(0, t.shake - dt * 1.6); t.glow = Math.max(0, t.glow - dt * .25); if (t.dead){ t.hitT += dt; t.sink = Math.max(0, Math.min(1, (t.hitT - .55) / .8)); } });
@@ -2571,7 +2613,7 @@ function ninjaLauncher(c, ge, g){
 }
 
 /* ==================== ☄️ 加分時間（恐龍、忍者共用）：每場剛好 4 次，隨機時間出現，流星雨夜空、字掉 2 倍快、答對 ×1.5～2.0 ==================== */
-function bonusPlan(L, rnd){
+function bonusPlanDino(L, rnd){
   rnd = rnd || Math.random; const D = Math.min(8, L * .12), lead0 = Math.min(4, L * .08), tail = Math.min(2, L * .05);
   const avail = L - lead0 - tail - 4 * D; let gaps = [0, 1, 2].map(() => 10 + rnd() * 5); let sum = gaps[0] + gaps[1] + gaps[2]; let lead = lead0;
   if (sum <= avail) lead += rnd() * (avail - sum);   // 120 秒：間隔 10～15 秒隨機，開頭的等待也隨機
@@ -2580,11 +2622,21 @@ function bonusPlan(L, rnd){
   for (let k = 0; k < 4; k++){ out.push({s: t, e: t + D, d: D}); t += D + (gaps[k] || 0); }
   return out;
 }
-function bonusInit(g){ Object.assign(g, {bplan: bonusPlan(g.limit), bidx: 0, bonus: false, bn: 0, bonusTotal: 4, bonusDone: 0, meteors: [], bmults: [], bend: 0}); }
+// 忍者的加分時間（v8，比較不頻繁）：每次 10 秒。30 秒＝1 次（約 15～20 秒開始）；60 秒＝2 次（15～20 秒、40～50 秒開始，間隔約 20 秒以上）；120 秒＝每約 30 秒 1 次（隨機），共 4 次
+const NINJA_BONUS_D = 10;
+function bonusPlanNinja(L, rnd){
+  rnd = rnd || Math.random; const u = (a, b) => a + rnd() * (b - a); const D = NINJA_BONUS_D; let starts;
+  if (L <= 30) starts = [u(15, 20)];
+  else if (L <= 60){ const s1 = u(15, 20); starts = [s1, u(Math.max(40, s1 + 20), 50)]; }
+  else { starts = []; for (let k = 0; k * 30 < L; k++) starts.push(30 * k + (k ? u(10, 20) : u(15, 20))); }
+  return starts.map(t => ({s: t, e: t + D, d: D}));
+}
+const bonusPlan = (L, rnd, kind) => kind === 'ninja' ? bonusPlanNinja(L, rnd) : bonusPlanDino(L, rnd);
+function bonusInit(g){ const bp = bonusPlan(g.limit, null, g.kind); Object.assign(g, {bplan: bp, bidx: 0, bonus: false, bn: 0, bsp: 2, bonusTotal: bp.length, bonusDone: 0, meteors: [], bmults: [], bend: 0}); }
 function bonusMult(){ return Math.round((1.5 + Math.random() * .5) * 10) / 10; }   // 1.5～2.0
 function bonusStart(g){
-  const pl = g.bplan[g.bidx]; if (!pl) return; g.bidx++; g.bonus = true; g.bend = pl.e; g.bstart = pl.s; g.sch && (g.sch.tau = 99);
-  gBanner('☄️ 加分時間！<small>流星雨來了・字掉得更快・答對分數 ×1.5～2.0<\/small>', 2.2, 'bonus'); blip('win');
+  const pl = g.bplan[g.bidx]; if (!pl) return; g.bidx++; g.bonus = true; g.bend = pl.e; g.bstart = pl.s; g.bsp = Math.round((1.5 + Math.random() * .5) * 100) / 100; g.sch && (g.sch.tau = 99);
+  gBanner(g.kind === 'ninja' ? '☄️ 加分時間！<small>流星雨來了・速度變快 ×' + g.bsp.toFixed(1) + '・答對分數 ×1.5～2.0<\/small>' : '☄️ 加分時間！<small>流星雨來了・字掉得更快・答對分數 ×1.5～2.0<\/small>', 2.2, 'bonus'); blip('win');
 }
 function bonusEnd(g){ g.bonus = false; g.bonusDone++; if (g.sch) g.sch.tau = Math.min(g.sch.tau, 0); }
 function bonusTick(g, dt, hold){   // hold = 換題轉場中：計時暫停，但夜空還是要照常淡出
@@ -2628,7 +2680,7 @@ function dinoPool(){   // 有足夠同義字（≥3 個單字）和反義字（�
   for (const w of Object.keys(DICT)){
     const e = DICT[w]; const syn = relMap(e, 'syn'), ant = relMap(e, 'ant'); ant.forEach((z, k) => syn.delete(k));
     const one = m => [...m.keys()].filter(k => /^[a-z]+$/i.test(k)).length;
-    if (/^[a-z]+$/.test(w) && one(syn) >= 3 && one(ant) >= 2) out.push({w, zh: gZh(w), syn, ant});
+    if (/^[a-z]+$/.test(w) && gContentOk(w, 3) && one(syn) >= 3 && one(ant) >= 2) out.push({w, zh: gZh(w), syn, ant});
   }
   return DINO_POOL = out;
 }
@@ -2639,8 +2691,8 @@ function dinoUnrelated(x, p){   // x 不是目標字的同義字／反義字（x
 }
 /* ---- 字池：排名題庫的前 N 個字（500／1000／3000，最簡單的先），目標字要有足夠的同義字／反義字 ---- */
 function dinoBankKey(){ const k = effBank(); return k === 'mine' ? 'ket' : k; }
-function dinoTop(){ return topPool(dinoBankKey(), QB.diff, GS.bankN); }
-function dinoTargets(){ const T = dinoTop(); let c = dinoPool().filter(x => T.set.has(x.w)); if (c.length < 10) c = dinoPool(); return c; }
+function dinoTop(){ return gamePool(); }
+function dinoTargets(){ const T = dinoTop(); let c = dinoPool().filter(x => T.set.has(x.w)); if (c.length < 10) c = dinoPool().filter(x => gContentOk(x.w, 3)); if (c.length < 10) c = dinoPool(); return c; }
 const dinoSingles = (x, k) => [...x[k].keys()].filter(w => /^[a-z]+$/i.test(w));
 function dinoMakeRound(g, mode0){
   const pool = dinoTargets(); const recent = new Set(QRECENT); let m = mode0; const free = L => L.filter(x => !g.taken.has(x.w));
@@ -2653,7 +2705,7 @@ function dinoMakeRound(g, mode0){
   const p = cand[0]; g.taken.add(p.w); const other = m === 'syn' ? 'ant' : 'syn';
   const rel = new Set([...p.syn.keys(), ...p.ant.keys()]);
   const ent = (mm, w, r) => ({w, zh: shortZh(p[mm].get(w) || '') || gZh(w), rel: r});
-  if (!g.fills) g.fills = shuffle(dinoTop().list.filter(x => /^[a-z]{3,9}$/.test(x)));
+  if (!g.fills) g.fills = shuffle(dinoTop().list.filter(x => x.length <= 9 && gContentOk(x)));
   const none = []; for (const x of g.fills){ if (none.length >= 60) break; if (x === p.w || rel.has(x) || !dinoUnrelated(x, p)) continue; none.push({w: x, zh: gZh(x), rel: 'none'}); }
   const all = mm => [...p[mm].entries()].map(([w, zh]) => ({w, zh: shortZh(zh || '') || gZh(w)}));
   qRemember([p.w]);
@@ -2850,7 +2902,7 @@ function dinoEat(w, wx){
     g.score = Math.round((g.score - 1) * 10) / 10; g.bd.pen++; g.combo = 0; g.stats.bad++; R.eaten[w.w] = 'bad'; QS.wrong++; LS.set(QKEY, QS);
     gFloat(wx, my - 50, '−1 😖', '#d5467e'); g.mood = 'yuck'; g.moodT = 1.2; blip('bad');
   } else {
-    g.zap = .5; g.stats.zap++; gFloat(wx, my - 50, '⚡ 電到了！', '#e6a800'); g.mood = 'zap'; g.moodT = .6; blip('short'); gBurst(wx, my, 14);
+    g.zap = .5; g.combo = 0; g.stats.zap++; gFloat(wx, my - 50, '⚡ 電到了！連擊歸零', '#e6a800'); g.mood = 'zap'; g.moodT = .6; blip('short'); gBurst(wx, my, 14);
   }
   gHud();
 }
@@ -2974,8 +3026,9 @@ function drawDino(c, x, gy, s, face, open, mood, t){
 
 /* ---- 測試用小掛勾 ---- */
 window.__game = {
-  get(){ const g = G; if (!g) return {kind: null, last: G_LAST}; const it = g.items[g.i] || {}; return {kind: g.kind, t: g.t, i: g.i, n: g.items.length, score: g.score, right: g.right, answer: it.answer, w: it.w, mode: it.mode, opts: it.opts, angle: g.angle, charge: g.charge, charging: !!g.charging, lock: !!g.lock, paused: !!g.paused, reveal: g.reveal, dx: g.dx, vx: g.vx, wall: g.wall, geo: g.kind === 'dino' ? dinoGeom() : null, targets: (g.targets || []).map(t => ({w: t.w, ok: t.ok, x: t.x, y: t.y, face: t.face, sink: t.sink, dead: !!t.dead, kind: t.kind, row: t.row, gold: false})), old: (g.old || []).map(t => ({w: t.w, dead: true, face: t.face, sink: t.sink})), belt: (g.belt || []).map(t => ({w: t.w, ok: t.ok, x: t.x, y: t.y, dead: !!t.dead, face: t.face})), bdir: g.bdir, bv: g.bv, bflip: g.bflip, shots: (g.shots || []).length, W: g.W, H: g.H, combo: g.combo, maxCombo: g.maxCombo, spd: g.spd, bd: g.bd, words: (g.words || []).map(w => ({w: w.w, y: w.y, x: w.x, bw: w.bw, ok: w.ok, gold: !!w.gold, rel: w.rel, good: w.good, bad: w.bad, state: w.state})), bonusOn: !!g.bonus, bn: g.bn, bonusDone: g.bonusDone, bonusTotal: g.bonusTotal, bmults: g.bmults, bplan: g.bplan, meteors: (g.meteors || []).length, floats: (g.floats || []).map(f => f.text), trans: g.trans ? {t: g.trans.t, done: g.trans.done} : null, okRun: g.okRun, ate: g.rounds && g.rounds[g.ri] ? g.rounds[g.ri].ate : null, zap: g.zap, phase: g.rd && g.rd.phase, rt: g.rd && g.rd.t, left: g.left, limit: g.limit, timed: !!g.timed, bonus: !!g.bonus, waves: g.waves, rwin: g.rd && g.rd.win, ate: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].ate,  ri: g.ri, nr: g.rounds && g.rounds.length, target: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].target, dmode: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].mode, mcd: g.mcd, stats: g.stats, last: G_LAST}; },
+  get(){ const g = G; if (!g) return {kind: null, last: G_LAST}; const it = g.items[g.i] || {}; return {kind: g.kind, t: g.t, i: g.i, n: g.items.length, score: g.score, right: g.right, answer: it.answer, w: it.w, mode: it.mode, opts: it.opts, angle: g.angle, charge: g.charge, charging: !!g.charging, lock: !!g.lock, paused: !!g.paused, reveal: g.reveal, dx: g.dx, vx: g.vx, wall: g.wall, geo: g.kind === 'dino' ? dinoGeom() : null, targets: (g.targets || []).map(t => ({w: t.w, ok: t.ok, x: t.x, y: t.y, face: t.face, sink: t.sink, dead: !!t.dead, kind: t.kind, row: t.row, gold: false})), old: (g.old || []).map(t => ({w: t.w, dead: true, face: t.face, sink: t.sink})), belt: (g.belt || []).map(t => ({w: t.w, ok: t.ok, x: t.x, y: t.y, dead: !!t.dead, face: t.face})), bdir: g.bdir, bv: g.bv, bflip: g.bflip, shots: (g.shots || []).length, W: g.W, H: g.H, combo: g.combo, maxCombo: g.maxCombo, spd: g.spd, bd: g.bd, words: (g.words || []).map(w => ({w: w.w, y: w.y, x: w.x, bw: w.bw, ok: w.ok, gold: !!w.gold, rel: w.rel, good: w.good, bad: w.bad, state: w.state})), bonusOn: !!g.bonus, bsp: g.bsp, bn: g.bn, bonusDone: g.bonusDone, bonusTotal: g.bonusTotal, bmults: g.bmults, bplan: g.bplan, meteors: (g.meteors || []).length, floats: (g.floats || []).map(f => f.text), trans: g.trans ? {t: g.trans.t, done: g.trans.done} : null, okRun: g.okRun, ate: g.rounds && g.rounds[g.ri] ? g.rounds[g.ri].ate : null, zap: g.zap, phase: g.rd && g.rd.phase, rt: g.rd && g.rd.t, left: g.left, limit: g.limit, timed: !!g.timed, bonus: !!g.bonus, waves: g.waves, rwin: g.rd && g.rd.win, ate: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].ate,  ri: g.ri, nr: g.rounds && g.rounds.length, target: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].target, dmode: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].mode, mcd: g.mcd, stats: g.stats, last: G_LAST}; },
   freeze(on){ if (G) G.freeze = on !== false; },
+  isJH: w => /J/.test((LEXD[w] || {}).tags || ''), allItems: () => (G ? G.items.map(it => ({w: it.w, answer: it.answer, opts: it.opts, mode: it.mode, hard: it.hard || null})) : []), contentOk: w => gContentOk(w), isFunc: w => FUNC_WORDS.has(w), gamePool: () => gamePool().list.slice(), noneWords: () => (G && G.rd ? G.rd.sup.none.map(x => x.w) : []),
   speed(m){ if (G) G.speedMul = m; },
   aimAt(k){ const g = G; if (!g || !g.targets) return; const t = k === 'belt' ? g.belt.find(x => x.ok && !x.dead && x.x > 0 && x.x < g.W) || g.belt.find(x => x.ok) : k == null ? g.targets.find(x => x.ok) : g.targets[k]; if (!t) return; const ge = ninjaGeom(); g.angle = Math.atan2(t.x - ge.lx, (ge.ly - 12) - t.y); return g.angle; },
   hit(ok){ const g = G; if (!g) return false; if (g.kind === 'dino') return dinoForce(ok === false ? 'bad' : 'good'); if (g.lock) return false; if (g.kind === 'ninja'){ const t = g.targets.find(x => x.ok === (ok !== false)); ninjaHit(t); return true; } return false; },
@@ -2987,7 +3040,7 @@ window.__game = {
   skipIntro: () => { const g = G; if (g && g.rd && g.rd.phase === 'intro'){ g.rd.pt = 0; } },
   skipRound: () => dinoSkipRound(),
   endNow: () => { if (G) gEnd(); },
-  bonusPlanOf: L => bonusPlan(L),
+  bonusPlanOf: L => bonusPlan(L), ninjaPlanOf: L => bonusPlan(L, null, 'ninja'),
   noBonus: on => { const g = G; if (!g) return; if (on !== false){ if (!g._plan) g._plan = g.bplan; g.bplan = []; } else if (g._plan){ g.bplan = g._plan; g._plan = null; } },
   toBonus: () => { const g = G; if (g && g._plan){ g.bplan = g._plan; g._plan = null; } if (g && g.bplan[g.bidx]) g.left = g.limit - g.bplan[g.bidx].s - .05; },
   setLeft: n => { if (G) G.left = n; },
@@ -2998,7 +3051,7 @@ window.__game = {
   toSetup: () => { if (GTIMED[state.game]) gShowSetup(state.game, true); },
   prefs: () => ({consent: PREF.consent, uid: PREF.uid, cookie: document.cookie, ls: LS.get('vocabPrefs', null), lsUid: LS.get('vocabUid', null), ss: SS.get('vocabPrefsS')}),
   settings: () => ({count: GS.count, speed: GS.speed, time: GS.time, dens: GS.dens, bankN: GS.bankN}),
-  bankInfo: n => { const T = topPool(dinoBankKey(), QB.diff, n), T5 = topPool(dinoBankKey(), QB.diff, 500), T1 = topPool(dinoBankKey(), QB.diff, 1000); const sc = T.list.reduce((a, w) => a + wordScore(w), 0) / T.list.length; const tg = dinoPool().filter(x => T.set.has(x.w)).length; return {n: T.n, avg: sc, list: n === 500 ? T.list : [], nested: n === 500 ? T.list.every(w => T1.set.has(w)) : n === 1000 ? T.list.every(w => topPool(dinoBankKey(), QB.diff, 3000).set.has(w)) : true, targets: tg}; },
+  bankInfo: n => { const pn = k => { const o = GS.bankN; GS.bankN = k; try{ return gamePool(); } finally { GS.bankN = o; } }; const T = pn(n), T5 = pn(500), T1 = pn(1000); const sc = T.list.reduce((a, w) => a + wordScore(w), 0) / T.list.length; const tg = dinoPool().filter(x => T.set.has(x.w)).length; return {n: T.list.length, avg: sc, list: n === 500 ? T.list : [], nested: n === 500 ? T.list.every(w => T1.set.has(w)) : n === 1000 ? T.list.every(w => pn(3000).set.has(w)) : true, targets: tg}; },
   flipBelt: () => { if (G) G.bflip = 0; },
   items: () => G ? G.items.map(it => ({w: it.w, answer: it.answer, mode: it.mode, zh: it.zh, opts: it.opts, rel: it.rel, round: it.round, zh: it.zh})) : []
 };
