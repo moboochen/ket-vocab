@@ -429,6 +429,11 @@ h3.sub{margin:14px 0 6px;font-size:1em;color:#4a3d7a}
 .gbanner.bonus{background:linear-gradient(135deg,#2b2a6b,#6a4fd1);color:#fff;border-color:#ffe27a;font-size:1.5em}
 .gprompt.flash{animation:pflash .9s ease-out}
 @keyframes pflash{0%{box-shadow:0 0 0 0 rgba(255,210,77,.9);transform:scale(1.03)}100%{box-shadow:0 0 0 18px rgba(255,210,77,0);transform:scale(1)}}
+
+.gclock.pause{opacity:.5;filter:grayscale(.5)}
+.gbanner.topic.show{animation:topicpop .7s cubic-bezier(.3,1.6,.5,1)}
+@keyframes topicpop{0%{transform:translate(-50%,0) scale(.3) rotate(-8deg)}60%{transform:translate(-50%,0) scale(1.18) rotate(3deg)}100%{transform:translate(-50%,0) scale(1) rotate(0)}}
+.gbanner.topic{border-color:#ffd24d;background:linear-gradient(135deg,#fff,#ffeaf4)}
 </style>
 </head>
 <body>
@@ -1991,6 +1996,24 @@ function gCanvasInit(){
   st.addEventListener('touchmove', e => e.preventDefault(), {passive: false});
   st.addEventListener('contextmenu', e => e.preventDefault());
 }
+/* ---- 換題目的場景轉場：圓形光圈蓋住畫面 → 換題 → 光圈打開。轉場中倒數計時暫停 ---- */
+function gTransStart(g, fn, html, lead){ if (g.trans) return; g.trans = {t: -(lead || 0), mid: .6, dur: 1.5, done: false, fn, html}; }
+function gTransTick(g, dt){
+  const tr = g.trans; if (!tr) return false; tr.t += dt;
+  if (!tr.done && tr.t >= tr.mid){ tr.done = true; tr.fn(); if (tr.html) gBanner(tr.html, 1.7, 'tgt topic'); blip('pop'); }
+  if (tr.t >= tr.dur) g.trans = null; return true;
+}
+function gTransDraw(c, g){
+  const tr = g.trans; if (!tr || tr.t <= 0) return; const W = g.W, H = g.H;
+  const u = tr.t < tr.mid ? tr.t / tr.mid : 1 - (tr.t - tr.mid) / (tr.dur - tr.mid); const e = u * u * (3 - 2 * u); if (e <= .003) return;
+  const rad = e * Math.hypot(W, H) / 2 * 1.04, cx = W / 2, cy = H / 2;
+  const gr = c.createRadialGradient(cx, cy, 0, cx, cy, Math.max(1, rad)); gr.addColorStop(0, '#fff3fa'); gr.addColorStop(.6, '#ffd6e7'); gr.addColorStop(1, '#cdb8ff');
+  c.save(); c.fillStyle = gr; c.beginPath(); c.arc(cx, cy, rad, 0, 7); c.fill(); c.lineWidth = 7; c.strokeStyle = '#fff'; c.stroke();
+  c.lineWidth = 3; c.strokeStyle = '#ffd24d'; c.beginPath(); c.arc(cx, cy, Math.max(0, rad - 10), 0, 7); c.stroke();
+  const ns = 14; for (let k = 0; k < ns; k++){ const a = k / ns * 6.283 + tr.t * 2.2, rr = Math.max(0, rad - 22) * (k % 2 ? .62 : .86), sz = Math.min(W, H) * .028 * (k % 3 + 1) * Math.min(1, e * 1.5);
+    c.fillStyle = k % 2 ? '#ffd24d' : '#fff'; c.beginPath(); for (let j = 0; j < 10; j++){ const ra = j % 2 ? sz * .45 : sz, aa = a + j * Math.PI / 5 - Math.PI / 2; c.lineTo(cx + Math.cos(a) * rr + Math.cos(aa) * ra, cy + Math.sin(a) * rr * .8 + Math.sin(aa) * ra); } c.closePath(); c.fill(); }
+  c.restore();
+}
 function gLoop(ts){
   const g = G; if (!g || g.stopped || g.paused) return;
   const dt = g.last ? Math.min(.05, (ts - g.last) / 1000) : 0; g.last = ts;
@@ -1999,7 +2022,7 @@ function gLoop(ts){
   g.update(dt); gParticles(dt);
   due.forEach(x => { if (G === x.g) x.fn(); });
   if (G !== g) return;
-  g.draw(); gDrawParticles();
+  g.draw(); if (g.trans) gTransDraw(g.cx, g); gDrawParticles();
   g.raf = requestAnimationFrame(gLoop);
 }
 function gRun(){ if (!G) return; cancelAnimationFrame(G.raf); G.last = 0; G.raf = requestAnimationFrame(gLoop); }
@@ -2185,7 +2208,7 @@ function ninjaUpdate(dt){
   if (g.rot) g.angle = Math.max(-1.2, Math.min(1.2, g.angle + g.rot * 1.0 * dt));
   if (g.charging) g.charge = Math.min(1, g.charge + dt / 1.1);
   const fb = $('#gFire'); if (fb) fb.style.setProperty('--p', g.charge.toFixed(3));
-  if (!g.freeze){ g.left = Math.max(0, g.left - dt); bonusTick(g, dt); g.mt = (g.mt || 0) + dt * .85 * g.spd * (g.bonus ? 2 : 1); ninjaBeltUpdate(g, dt, ge); }
+  if (!g.freeze){ if (g.trans){ gTransTick(g, dt); bonusTick(g, dt, true); } else { g.left = Math.max(0, g.left - dt); bonusTick(g, dt); g.mt = (g.mt || 0) + dt * .85 * g.spd * (g.bonus ? 2 : 1); ninjaBeltUpdate(g, dt, ge); } }
   ninjaPlace();
   g.old = (g.old || []).filter(t => t.hitT < 1.8); g.old.forEach(t => { t.hitT += dt; t.shake = Math.max(0, t.shake - dt * 1.6); t.sink = Math.max(0, Math.min(1, (t.hitT - .55) / .8)); });
   ninjaAll().forEach(t => { t.shake = Math.max(0, t.shake - dt * 1.6); t.glow = Math.max(0, t.glow - dt * .25); if (t.dead){ t.hitT += dt; t.sink = Math.max(0, Math.min(1, (t.hitT - .55) / .8)); } });
@@ -2202,12 +2225,13 @@ function ninjaUpdate(dt){
     } else if (s.state === 'fall'){ s.vy += 700 * dt; s.y += s.vy * dt; s.spin += 6 * dt; s.alpha -= dt * 1.4; if (s.alpha <= 0) s.state = 'gone'; }
   }
   g.shots = g.shots.filter(s => s.state !== 'gone');
-  const cl = $('#gClock'); if (cl){ const n = Math.ceil(g.left - 1e-6); const red = g.left <= 10; if (cl.textContent !== String(n)) cl.textContent = n; cl.classList.toggle('red', red); }
+  const cl = $('#gClock'); if (cl){ const n = Math.ceil(g.left - 1e-6); const red = g.left <= 10; if (cl.textContent !== String(n)) cl.textContent = n; cl.classList.toggle('red', red); cl.classList.toggle('pause', !!g.trans); }
   if (g.left <= 0) return gEnd();
 }
 function ninjaHit(t){
   const g = G, it = g.items[g.i]; g.lock = true; t.dead = true; t.hitT = 0; t.sink = 0; t.face = g.forceFace != null ? g.forceFace : Math.floor(Math.random() * 4); t.shake = .8;   // 4 種被打中的表情隨機出現
-  if (t.ok){ const mult = g.bonus ? bonusMult() : 1; const r = gResult(true, t.w, 10, false, mult); g.stats.ok++; if (mult > 1) g.bmults.push(mult); gBurst(t.x, t.y, mult > 1 ? 80 : 46, true); gFloat(t.x, t.y - 40, '+' + fmtN(r.total), mult > 1 ? '#8a4bff' : null); if (mult > 1) gFloat(t.x, t.y - 74, 'x' + mult.toFixed(1) + '!', '#8a4bff'); if (r.combo >= 2) gFloat(t.x, t.y - (mult > 1 ? 108 : 76), '🔥 x' + r.combo, '#ff6a00'); gMsg(goodMsg(r), 'good'); gAfter(.9, ninjaAdvance); }
+  if (t.ok){ const mult = g.bonus ? bonusMult() : 1; const r = gResult(true, t.w, 10, false, mult); g.stats.ok++; if (mult > 1) g.bmults.push(mult); gBurst(t.x, t.y, mult > 1 ? 80 : 46, true); gFloat(t.x, t.y - 40, '+' + fmtN(r.total), mult > 1 ? '#8a4bff' : null); if (mult > 1) gFloat(t.x, t.y - 74, 'x' + mult.toFixed(1) + '!', '#8a4bff'); if (r.combo >= 2) gFloat(t.x, t.y - (mult > 1 ? 108 : 76), '🔥 x' + r.combo, '#ff6a00'); gMsg(goodMsg(r), 'good'); g.okRun = (g.okRun || 0) + 1;
+    if (g.okRun % 5 === 0) gTransStart(g, ninjaAdvance, `<small>✨ 題目更新！<\/small><b>第 ${g.okRun / 5 + 1} 組題目<\/b>`, .7); else gAfter(.9, ninjaAdvance); }
   else { const c = g.targets.find(x => x.ok && !x.dead) || g.belt.find(x => x.ok && !x.dead); if (c) c.glow = 1; g.stats.bad++; gBurst(t.x, t.y, 8); gResult(false, t.w, 0); gMsg(wrongMsg(it, t.w), 'bad'); gAfter(1.5, ninjaAdvance); }
 }
 function ninjaAdvance(){ if (G) gNext(); }
@@ -2437,9 +2461,9 @@ function bonusStart(g){
   gBanner('☄️ 加分時間！<small>流星雨來了・字掉得更快・答對分數 ×1.5～2.0<\/small>', 2.2, 'bonus'); blip('win');
 }
 function bonusEnd(g){ g.bonus = false; g.bonusDone++; if (g.sch) g.sch.tau = Math.min(g.sch.tau, 0); }
-function bonusTick(g, dt){
+function bonusTick(g, dt, hold){   // hold = 換題轉場中：計時暫停，但夜空還是要照常淡出
   const el = g.limit - g.left;
-  if (!g.bonus && g.bidx < g.bplan.length && el >= g.bplan[g.bidx].s) bonusStart(g);
+  if (hold){} else if (!g.bonus && g.bidx < g.bplan.length && el >= g.bplan[g.bidx].s) bonusStart(g);
   else if (g.bonus && el >= g.bend) bonusEnd(g);
   g.bn += ((g.bonus ? 1 : 0) - g.bn) * Math.min(1, dt * 4); if (!g.bonus && g.bn < .02) g.bn = 0;
   if (g.bn > .05 && g.W){ if (Math.random() < dt * 9) g.meteors.push({x: g.W * (.15 + Math.random() * 1.0), y: -30, vx: -(240 + Math.random() * 220), vy: 330 + Math.random() * 260, len: 70 + Math.random() * 90, w: 2 + Math.random() * 2.5}); }
@@ -2629,14 +2653,14 @@ function gBanner(html, secs, cls){
 function dinoSwitch(first){   // 換目標字（模式也跟著換：同義字 ⇄ 反義字）
   const g = G; const prev = g.rounds[g.rounds.length - 1]; const R = dinoMakeRound(g, prev ? (prev.mode === 'syn' ? 'ant' : 'syn') : (Math.random() < .5 ? 'syn' : 'ant'));
   g.rounds.push(R); g.ri = g.rounds.length - 1; g.i = g.ri; g.words.forEach(w => { if (w.state === 'fall') w.state = 'fade'; });
-  g.rd = {r: g.ri, mode: R.mode, sup: R.sup, shown: R.shown, t: 0, win: 15 + Math.random() * 5, need: 6, phase: first === true ? 'intro' : 'switch', pt: first === true ? 1.9 : 1.6};
-  g.sch.tau = 0;
+  g.rd = {r: g.ri, mode: R.mode, sup: R.sup, shown: R.shown, t: 0, win: 30 + Math.random() * 6, need: 5, phase: first === true ? 'intro' : 'play', pt: first === true ? 1.9 : 0};
+  g.sch.tau = first === true ? 0 : 99;
   const [ic, nm, ds] = DMODE[R.mode];
   $('#gPrompt').innerHTML = `<div class="dprompt"><span class="dlabel">🎯 目標字<\/span><b class="dt en">${esc(R.target)}<\/b><span class="dtz">${esc(R.tzh)}<\/span><span class="dmode ${R.mode}">${ic} ${nm}<\/span><\/div><div class="dsub">只吃<b>${ds}<\/b>：吃對 <b class="p">+1<\/b>・吃到相反的 <b class="m">−1<\/b>・不相關的字會 <b class="z">⚡ 電到<\/b>（不扣分，但會變慢 0.5 秒）<\/div>`;
   const pr = $('#gPrompt'); pr.classList.remove('flash'); void pr.offsetWidth; pr.classList.add('flash');
   gHud();
   if (first === true) gMsg(`<div class="gm1">準備好了嗎？<\/div><div>目標字 <b class="en">${esc(R.target)}<\/b>（${esc(R.tzh)}）<\/div><div class="dmode ${R.mode}" style="display:inline-block;margin-top:4px">${ic} ${nm}<\/div>`, 'info');
-  else { gBanner(`<small>🎯 新目標字！<\/small><b class="en">${esc(R.target)}<\/b><span>${esc(R.tzh)}<\/span><span class="dmode ${R.mode}">${ic} ${nm}<\/span>`, 1.8, 'tgt'); blip('pop'); }
+  else { gBanner(`<small>✨ 題目更新！新目標字<\/small><b class="en">${esc(R.target)}<\/b><span>${esc(R.tzh)}<\/span><span class="dmode ${R.mode}">${ic} ${nm}<\/span>`, 1.8, 'tgt'); blip('pop'); }
 }
 function dinoUpdate(dt){
   const g = G, ge = dinoGeom(), rd = g.rd;
@@ -2653,15 +2677,15 @@ function dinoUpdate(dt){
   g.chomp = Math.max(0, g.chomp - dt * 3); g.moodT = Math.max(0, g.moodT - dt); if (!g.moodT) g.mood = '';
   g.clouds.forEach(cl => { cl.p = (cl.p + dt * .012) % 1.2; });
   g.hearts.forEach(h => { h.y -= 50 * dt; h.life -= dt; }); g.hearts = g.hearts.filter(h => h.life > 0);
-  const v = dinoV(); let near = false; const run = rd.phase !== 'intro' && !g.freeze;
+  const v = dinoV(); let near = false; const run = rd.phase !== 'intro' && !g.freeze && !g.trans;
   if (rd.phase === 'intro'){ if (!g.freeze) rd.pt -= dt; if (rd.pt <= 0){ rd.phase = 'play'; gMsg(''); } }
   else if (!g.freeze){
-    g.left = Math.max(0, g.left - dt); bonusTick(g, dt);
-    if (rd.phase === 'switch'){ rd.pt -= dt; if (rd.pt <= 0){ rd.phase = 'play'; g.sch.tau = 99; } }
+    if (g.trans){ gTransTick(g, dt); bonusTick(g, dt, true); }   // 轉場中：倒數計時暫停
     else {
+      g.left = Math.max(0, g.left - dt); bonusTick(g, dt);
       rd.t += dt; g.sch.tau += dt;
       if (g.sch.tau >= DBAND[g.bonus ? 3 : GS.dens] * g.H / v) dinoWaveTry();
-      if (g.left > 4 && !g.bonus && (rd.t >= rd.win || g.rounds[rd.r].ate >= rd.need) && !(g.bplan[g.bidx] && g.bplan[g.bidx].s - (g.limit - g.left) < 2.5)) dinoSwitch();
+      if (g.left > 4 && !g.bonus && (rd.t >= rd.win || g.rounds[rd.r].ate >= rd.need) && !(g.bplan[g.bidx] && g.bplan[g.bidx].s - (g.limit - g.left) < 2.5)) gTransStart(g, () => dinoSwitch());
     }
   }
   for (const w of g.words){
@@ -2675,7 +2699,7 @@ function dinoUpdate(dt){
   }
   g.words = g.words.filter(w => w.a > 0);
   g.mouth = near ? 1 : 0;
-  const cl = $('#gClock'); if (cl){ const n = Math.ceil(g.left - 1e-6); const red = g.left <= 10; if (cl.textContent !== String(n)) cl.textContent = n; cl.classList.toggle('red', red); }
+  const cl = $('#gClock'); if (cl){ const n = Math.ceil(g.left - 1e-6); const red = g.left <= 10; if (cl.textContent !== String(n)) cl.textContent = n; cl.classList.toggle('red', red); cl.classList.toggle('pause', !!g.trans); }
   if (g.left <= 0) return gEnd();
 }
 function dinoEat(w, wx){
@@ -2814,7 +2838,7 @@ function drawDino(c, x, gy, s, face, open, mood, t){
 
 /* ---- 測試用小掛勾 ---- */
 window.__game = {
-  get(){ const g = G; if (!g) return {kind: null, last: G_LAST}; const it = g.items[g.i] || {}; return {kind: g.kind, t: g.t, i: g.i, n: g.items.length, score: g.score, right: g.right, answer: it.answer, w: it.w, mode: it.mode, opts: it.opts, angle: g.angle, charge: g.charge, charging: !!g.charging, lock: !!g.lock, paused: !!g.paused, reveal: g.reveal, dx: g.dx, vx: g.vx, wall: g.wall, geo: g.kind === 'dino' ? dinoGeom() : null, targets: (g.targets || []).map(t => ({w: t.w, ok: t.ok, x: t.x, y: t.y, face: t.face, sink: t.sink, dead: !!t.dead, kind: t.kind, row: t.row, gold: false})), old: (g.old || []).map(t => ({w: t.w, dead: true, face: t.face, sink: t.sink})), belt: (g.belt || []).map(t => ({w: t.w, ok: t.ok, x: t.x, y: t.y, dead: !!t.dead, face: t.face})), bdir: g.bdir, bv: g.bv, bflip: g.bflip, shots: (g.shots || []).length, W: g.W, H: g.H, combo: g.combo, maxCombo: g.maxCombo, spd: g.spd, bd: g.bd, words: (g.words || []).map(w => ({w: w.w, y: w.y, x: w.x, bw: w.bw, ok: w.ok, gold: !!w.gold, rel: w.rel, good: w.good, bad: w.bad, state: w.state})), bonusOn: !!g.bonus, bn: g.bn, bonusDone: g.bonusDone, bonusTotal: g.bonusTotal, bmults: g.bmults, bplan: g.bplan, meteors: (g.meteors || []).length, floats: (g.floats || []).map(f => f.text), zap: g.zap, phase: g.rd && g.rd.phase, rt: g.rd && g.rd.t, left: g.left, limit: g.limit, timed: !!g.timed, bonus: !!g.bonus, waves: g.waves, rwin: g.rd && g.rd.win, ate: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].ate,  ri: g.ri, nr: g.rounds && g.rounds.length, target: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].target, dmode: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].mode, mcd: g.mcd, stats: g.stats, last: G_LAST}; },
+  get(){ const g = G; if (!g) return {kind: null, last: G_LAST}; const it = g.items[g.i] || {}; return {kind: g.kind, t: g.t, i: g.i, n: g.items.length, score: g.score, right: g.right, answer: it.answer, w: it.w, mode: it.mode, opts: it.opts, angle: g.angle, charge: g.charge, charging: !!g.charging, lock: !!g.lock, paused: !!g.paused, reveal: g.reveal, dx: g.dx, vx: g.vx, wall: g.wall, geo: g.kind === 'dino' ? dinoGeom() : null, targets: (g.targets || []).map(t => ({w: t.w, ok: t.ok, x: t.x, y: t.y, face: t.face, sink: t.sink, dead: !!t.dead, kind: t.kind, row: t.row, gold: false})), old: (g.old || []).map(t => ({w: t.w, dead: true, face: t.face, sink: t.sink})), belt: (g.belt || []).map(t => ({w: t.w, ok: t.ok, x: t.x, y: t.y, dead: !!t.dead, face: t.face})), bdir: g.bdir, bv: g.bv, bflip: g.bflip, shots: (g.shots || []).length, W: g.W, H: g.H, combo: g.combo, maxCombo: g.maxCombo, spd: g.spd, bd: g.bd, words: (g.words || []).map(w => ({w: w.w, y: w.y, x: w.x, bw: w.bw, ok: w.ok, gold: !!w.gold, rel: w.rel, good: w.good, bad: w.bad, state: w.state})), bonusOn: !!g.bonus, bn: g.bn, bonusDone: g.bonusDone, bonusTotal: g.bonusTotal, bmults: g.bmults, bplan: g.bplan, meteors: (g.meteors || []).length, floats: (g.floats || []).map(f => f.text), trans: g.trans ? {t: g.trans.t, done: g.trans.done} : null, okRun: g.okRun, ate: g.rounds && g.rounds[g.ri] ? g.rounds[g.ri].ate : null, zap: g.zap, phase: g.rd && g.rd.phase, rt: g.rd && g.rd.t, left: g.left, limit: g.limit, timed: !!g.timed, bonus: !!g.bonus, waves: g.waves, rwin: g.rd && g.rd.win, ate: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].ate,  ri: g.ri, nr: g.rounds && g.rounds.length, target: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].target, dmode: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].mode, mcd: g.mcd, stats: g.stats, last: G_LAST}; },
   freeze(on){ if (G) G.freeze = on !== false; },
   speed(m){ if (G) G.speedMul = m; },
   aimAt(k){ const g = G; if (!g || !g.targets) return; const t = k === 'belt' ? g.belt.find(x => x.ok && !x.dead && x.x > 0 && x.x < g.W) || g.belt.find(x => x.ok) : k == null ? g.targets.find(x => x.ok) : g.targets[k]; if (!t) return; const ge = ninjaGeom(); g.angle = Math.atan2(t.x - ge.lx, (ge.ly - 12) - t.y); return g.angle; },
