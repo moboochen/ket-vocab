@@ -2095,7 +2095,7 @@ function ninjaRound(){
   const slots = n >= 4 ? [[.17, 1, 0], [.83, 1, 0], [.37, 0, 1], [.63, 0, 1]] : [[.2, 1, 0], [.8, 1, 0], [.5, 0, 1]];
   const order = shuffle(it.opts.slice(0, slots.length));
   const decoyK = it.decoy ? order.findIndex(w => w !== it.answer) : -1; const fast = GS.speed >= 3;
-  g.targets = order.map((w, k) => ({w, ok: w === it.answer, gold: (w === it.answer && it.gold) || k === decoyK, fx: slots[k][0], row: slots[k][1], move: slots[k][2] || (fast ? 1 : 0), dir: slots[k][2] ? 1 : -1, ph: k * 1.7, x: 0, y: 0, shake: 0, pop: 0, glow: 0, dead: false}));
+  g.targets = order.map((w, k) => ({w, ok: w === it.answer, gold: (w === it.answer && it.gold) || k === decoyK, kind: Math.floor(Math.random() * 4), face: null, sink: 0, hitT: 0, fx: slots[k][0], row: slots[k][1], move: slots[k][2] || (fast ? 1 : 0), dir: slots[k][2] ? 1 : -1, ph: k * 1.7, x: 0, y: 0, shake: 0, pop: 0, glow: 0, dead: false}));
   g.phase = Math.random() * 6; ninjaPlace();
 }
 function ninjaPlace(){ const g = G, ge = ninjaGeom(); g.targets.forEach(t => { t.x = g.W * t.fx + (t.move ? ge.amp * Math.sin((g.mt || 0) * t.dir + (t.dir < 0 ? t.ph : 0)) : 0); t.y = ge.rowY[t.row]; }); }
@@ -2116,7 +2116,7 @@ function ninjaUpdate(dt){
   const fb = $('#gFire'); if (fb) fb.style.setProperty('--p', g.charge.toFixed(3));
   if (!g.freeze) g.mt = (g.mt || 0) + dt * .85 * g.spd;
   ninjaPlace();
-  g.targets.forEach(t => { t.shake = Math.max(0, t.shake - dt * 1.6); t.glow = Math.max(0, t.glow - dt * .25); if (t.dead) t.pop = Math.min(1, t.pop + dt * 3); });
+  g.targets.forEach(t => { t.shake = Math.max(0, t.shake - dt * 1.6); t.glow = Math.max(0, t.glow - dt * .25); if (t.dead){ t.hitT += dt; t.sink = Math.max(0, Math.min(1, (t.hitT - .55) / .8)); } });
   for (const s of g.shots){
     if (s.state === 'fly'){
       const steps = Math.max(1, Math.ceil(s.v * dt / 6));
@@ -2132,74 +2132,180 @@ function ninjaUpdate(dt){
   g.shots = g.shots.filter(s => s.state !== 'gone');
 }
 function ninjaHit(t){
-  const g = G, it = g.items[g.i]; g.lock = true;
-  if (t.ok){ t.dead = true; const r = gResult(true, t.w, 10, t.gold); gBurst(t.x, t.y, r.gold ? 90 : 46, true); gFloat(t.x, t.y - 40, '+' + r.total, r.gold ? '#e69500' : null); if (r.combo >= 2) gFloat(t.x, t.y - 76, '🔥 x' + r.combo, '#ff6a00'); gMsg(goodMsg(r), 'good'); gAfter(1.9, gNext); }
-  else { t.shake = 1; const c = g.targets.find(x => x.ok); if (c) c.glow = 1; gBurst(t.x, t.y, 8); gResult(false, t.w, 0); gMsg(wrongMsg(it, t.w), 'bad'); gAfter(3, gNext); }
+  const g = G, it = g.items[g.i]; g.lock = true; t.dead = true; t.hitT = 0; t.sink = 0; t.face = g.forceFace != null ? g.forceFace : Math.floor(Math.random() * 4); t.shake = .8;   // 4 種被打中的表情隨機出現
+  if (t.ok){ const r = gResult(true, t.w, 10, t.gold); gBurst(t.x, t.y, r.gold ? 90 : 46, true); gFloat(t.x, t.y - 40, '+' + r.total, r.gold ? '#e69500' : null); if (r.combo >= 2) gFloat(t.x, t.y - 76, '🔥 x' + r.combo, '#ff6a00'); gMsg(goodMsg(r), 'good'); gAfter(1.9, gNext); }
+  else { const c = g.targets.find(x => x.ok); if (c) c.glow = 1; gBurst(t.x, t.y, 8); gResult(false, t.w, 0); gMsg(wrongMsg(it, t.w), 'bad'); gAfter(3, gNext); }
+}
+/* ---------- 江戶街景背景（畫在離屏 canvas，只有尺寸改變才重畫）---------- */
+function rnd01(seed){ const x = Math.sin(seed * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }
+function edoLantern(c, x, y, s, glow){   // 紅燈籠（x,y 是掛繩的位置）
+  if (glow > 0){ const rg = c.createRadialGradient(x, y + s * 1.2, 2, x, y + s * 1.2, s * 3); rg.addColorStop(0, `rgba(255,170,70,${.55 * glow})`); rg.addColorStop(1, 'rgba(255,170,70,0)'); c.fillStyle = rg; c.beginPath(); c.arc(x, y + s * 1.2, s * 3, 0, 7); c.fill(); }
+  c.strokeStyle = '#3b2a22'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(x, y - s * .4); c.lineTo(x, y); c.stroke();
+  c.fillStyle = '#2f2420'; rrect(c, x - s * .42, y - 1, s * .84, s * .22, 2); c.fill();
+  c.fillStyle = '#e8342f'; c.beginPath(); c.ellipse(x, y + s * 1.05, s * .72, s * .88, 0, 0, 7); c.fill();
+  c.strokeStyle = 'rgba(120,10,10,.45)'; c.lineWidth = 1; for (let k = -1; k <= 1; k++){ c.beginPath(); c.ellipse(x, y + s * 1.05, s * (.72 - Math.abs(k) * .24), s * .88, 0, 0, 7); c.stroke(); }
+  c.fillStyle = 'rgba(255,255,255,.28)'; c.beginPath(); c.ellipse(x - s * .25, y + s * .8, s * .12, s * .3, .3, 0, 7); c.fill();
+  c.fillStyle = '#2f2420'; rrect(c, x - s * .42, y + s * 1.78, s * .84, s * .22, 2); c.fill();
+  c.strokeStyle = '#ffe9b0'; c.lineWidth = Math.max(1.5, s * .13); c.lineCap = 'round'; c.beginPath(); c.moveTo(x - s * .22, y + s * .85); c.lineTo(x + s * .22, y + s * .85); c.moveTo(x, y + s * .62); c.lineTo(x, y + s * 1.3); c.stroke();
+}
+function edoMachiya(c, x, w, roofTop, eaveY, floorY, baseY, seed){
+  const wood = '#4a2f26', plaster = '#d9c3b4';
+  // 二樓牆（灰泥＋木樑）
+  c.fillStyle = plaster; c.fillRect(x, eaveY, w, floorY - eaveY);
+  c.fillStyle = 'rgba(70,50,110,.18)'; c.fillRect(x, eaveY, w, floorY - eaveY);
+  c.fillStyle = wood; c.fillRect(x, eaveY, 4, floorY - eaveY); c.fillRect(x + w - 4, eaveY, 4, floorY - eaveY); c.fillRect(x, floorY - 5, w, 5);
+  // 蟲籠窗（發著暖光）
+  const ww = w * .26, wh = Math.min(26, (floorY - eaveY) * .5); [x + w * .2, x + w * .54].forEach(wx => { c.fillStyle = '#ffd27a'; c.fillRect(wx, eaveY + 9, ww, wh); c.strokeStyle = wood; c.lineWidth = 1.5; c.strokeRect(wx, eaveY + 9, ww, wh); for (let k = 1; k < 6; k++){ c.beginPath(); c.moveTo(wx + k * ww / 6, eaveY + 9); c.lineTo(wx + k * ww / 6, eaveY + 9 + wh); c.stroke(); } });
+  // 一樓：格子門＋暖簾
+  c.fillStyle = wood; c.fillRect(x, floorY, w, baseY - floorY);
+  c.strokeStyle = 'rgba(255,214,150,.22)'; c.lineWidth = 1; for (let k = 4; k < w; k += 7){ c.beginPath(); c.moveTo(x + k, floorY + 3); c.lineTo(x + k, baseY); c.stroke(); }
+  const nx = x + w * .5 - w * .17, nw = w * .34, nh = Math.min(40, (baseY - floorY) * .55);
+  c.fillStyle = '#2e3f7a'; c.fillRect(nx, floorY + 4, nw, nh); c.fillStyle = '#fff'; c.beginPath(); c.arc(nx + nw / 2, floorY + 4 + nh * .5, nw * .17, 0, 7); c.fill(); c.strokeStyle = '#1d2a55'; c.lineWidth = 1.5; [1, 2].forEach(k => { c.beginPath(); c.moveTo(nx + k * nw / 3, floorY + 4); c.lineTo(nx + k * nw / 3, floorY + 4 + nh); c.stroke(); });
+  // 瓦屋簷：深藍灰、一排排魚鱗瓦
+  const ov = w * .07; c.fillStyle = '#39405f'; c.beginPath(); c.moveTo(x - ov, eaveY + 4); c.lineTo(x + w * .09, roofTop); c.lineTo(x + w * .91, roofTop); c.lineTo(x + w + ov, eaveY + 4); c.closePath(); c.fill();
+  c.save(); c.clip(); const rows = Math.max(3, Math.round((eaveY - roofTop) / 7)), tw = 9;
+  for (let r = 0; r < rows; r++){ const y = roofTop + (r + 1) * (eaveY - roofTop + 4) / rows; c.strokeStyle = r % 2 ? '#2a3050' : '#4b5378'; c.lineWidth = 1.6; for (let tx = x - ov - (r % 2) * tw / 2; tx < x + w + ov; tx += tw){ c.beginPath(); c.arc(tx + tw / 2, y - 3, tw / 2, 0, Math.PI); c.stroke(); } }
+  c.restore();
+  c.fillStyle = '#6b7498'; rrect(c, x + w * .07, roofTop - 4, w * .86, 6, 3); c.fill();   // 屋脊
+  c.fillStyle = '#6b7498'; [x + w * .07, x + w * .93].forEach(ox => { c.beginPath(); c.arc(ox, roofTop - 3, 5, 0, 7); c.fill(); });   // 鬼瓦
+  c.fillStyle = '#242a45'; c.fillRect(x - ov, eaveY + 3, w + ov * 2, 5);   // 屋簷陰影
+}
+function ninjaBGDraw(c, W, H, ge){
+  // 黃昏天空
+  let gr = c.createLinearGradient(0, 0, 0, H * .55); [[0, '#2b2a6b'], [.38, '#7b4f9f'], [.68, '#e8709a'], [.88, '#ffae78'], [1, '#ffd9a0']].forEach(([p, col]) => gr.addColorStop(p, col)); c.fillStyle = gr; c.fillRect(0, 0, W, H);
+  for (let k = 0; k < 26; k++){ c.globalAlpha = .35 + rnd01(k + 3) * .5; c.fillStyle = '#fff'; c.beginPath(); c.arc(rnd01(k) * W, rnd01(k + 50) * H * .22, .8 + rnd01(k + 9) * 1.2, 0, 7); c.fill(); } c.globalAlpha = 1;
+  // 月牙
+  const mx = W * .86, my = H * .1, mr = Math.min(22, W * .035); c.fillStyle = '#fff6cf'; c.beginPath(); c.arc(mx, my, mr, 0, 7); c.fill(); c.fillStyle = '#5a3f8f'; c.beginPath(); c.arc(mx + mr * .45, my - mr * .1, mr * .9, 0, 7); c.fill();
+  // 晚霞雲
+  [[.12, .17, 1], [.55, .13, .8], [.78, .22, 1.1], [.35, .26, .7]].forEach(([fx, fy, sc]) => { c.fillStyle = 'rgba(255,170,190,.55)'; const x = fx * W, y = fy * H, u = 16 * sc; c.beginPath(); c.ellipse(x, y, u * 3, u * .55, 0, 0, 7); c.ellipse(x + u, y - u * .4, u * 1.6, u * .5, 0, 0, 7); c.fill(); });
+  // 富士山（遠方）
+  const hz = H * .36, fx = W * .3, fw = Math.min(W * .5, 330), fh = H * .27; c.fillStyle = '#7a62ab'; c.beginPath(); c.moveTo(fx - fw / 2, hz); c.quadraticCurveTo(fx - fw * .16, hz - fh * .78, fx - fw * .045, hz - fh); c.lineTo(fx + fw * .045, hz - fh); c.quadraticCurveTo(fx + fw * .16, hz - fh * .78, fx + fw / 2, hz); c.closePath(); c.fill();
+  c.fillStyle = '#f4eefc'; c.beginPath(); c.moveTo(fx - fw * .045, hz - fh); c.lineTo(fx + fw * .045, hz - fh); c.quadraticCurveTo(fx + fw * .075, hz - fh * .86, fx + fw * .11, hz - fh * .72); for (let k = 0; k < 5; k++) c.lineTo(fx + fw * (.09 - k * .045), hz - fh * (.76 + (k % 2) * .06)); c.lineTo(fx - fw * .11, hz - fh * .72); c.quadraticCurveTo(fx - fw * .075, hz - fh * .86, fx - fw * .045, hz - fh); c.fill();
+  c.fillStyle = '#6a5499'; c.beginPath(); c.moveTo(0, hz); for (let x = 0; x <= W; x += 12) c.lineTo(x, hz - 10 - Math.sin(x / W * 9 + 1) * 8 - Math.sin(x / W * 3) * 10); c.lineTo(W, hz); c.fill();
+  // 遠方城堡（天守閣）
+  const cx = W * .76, cb = hz - 6, cs = Math.min(1, W / 700) * 1.05; c.fillStyle = '#4b3b7c'; c.beginPath(); c.ellipse(cx, cb + 8, 90 * cs, 20 * cs, 0, Math.PI, 0); c.fill();
+  c.fillStyle = '#4f4084'; c.fillRect(cx - 44 * cs, cb - 8 * cs, 88 * cs, 14 * cs);
+  const tiers = [[34, 22], [26, 20], [18, 18]]; let ty = cb - 8 * cs;
+  tiers.forEach(([hw, hh], k) => { hw *= cs; hh *= cs; c.fillStyle = '#efe6f6'; c.fillRect(cx - hw, ty - hh, hw * 2, hh); c.fillStyle = 'rgba(80,60,130,.35)'; c.fillRect(cx - hw, ty - hh, hw * 2, hh);
+    c.fillStyle = '#ffd27a'; c.fillRect(cx - 3 * cs, ty - hh * .7, 6 * cs, hh * .35);
+    c.fillStyle = '#3b3a68'; c.beginPath(); c.moveTo(cx - hw - 14 * cs, ty - hh + 3); c.quadraticCurveTo(cx - hw * .4, ty - hh - 2 * cs, cx - hw * .5, ty - hh - 12 * cs); c.lineTo(cx + hw * .5, ty - hh - 12 * cs); c.quadraticCurveTo(cx + hw * .4, ty - hh - 2 * cs, cx + hw + 14 * cs, ty - hh + 3); c.closePath(); c.fill();
+    ty -= hh + 8 * cs; });
+  c.fillStyle = '#ffcf5a'; c.beginPath(); c.arc(cx - 15 * cs, ty + 4 * cs, 2.5 * cs, 0, 7); c.arc(cx + 15 * cs, ty + 4 * cs, 2.5 * cs, 0, 7); c.fill();
+  // 兩排町屋
+  const n = Math.max(3, Math.round(W / 170)), hw = W / n, floorY = ge.rowY[1] + ge.r * 1.25 + 24 - 6, eaveY0 = ge.rowY[0] - ge.r * 1.15;
+  for (let k = 0; k < n; k++){ const jit = rnd01(k + 7); edoMachiya(c, k * hw, hw, H * (.17 + .05 * jit), eaveY0 - 2 + jit * 6, ge.rowY[0] + ge.r * 1.25 + 22 + 8, ge.cy + 2, k); }
+  // 欄杆（兩層的架子）：二樓陽台欄杆、一樓店前木板
+  [0, 1].forEach(row => { const y = ge.rowY[row] + ge.r * 1.25 + (row ? 24 : 22); c.fillStyle = '#5b3624'; c.fillRect(W * .02, y + 10, W * .96, 18); c.fillStyle = 'rgba(0,0,0,.2)'; for (let x = W * .02 + 6; x < W * .98; x += 14) c.fillRect(x, y + 10, 4, 18);
+    c.fillStyle = row ? '#c98b4f' : '#b3452d'; rrect(c, W * .015, y, W * .97, 11, 5); c.fill(); c.fillStyle = 'rgba(255,255,255,.28)'; c.fillRect(W * .015 + 5, y + 2, W * .97 - 10, 3); });
+  // 前景木板地
+  const cy = ge.cy; gr = c.createLinearGradient(0, cy, 0, H); gr.addColorStop(0, '#9c6334'); gr.addColorStop(1, '#6e4222'); c.fillStyle = gr; c.fillRect(0, cy, W, H - cy);
+  c.fillStyle = '#c98b4f'; c.fillRect(0, cy, W, 6); c.strokeStyle = 'rgba(50,25,10,.35)'; c.lineWidth = 2; for (let x = 0; x < W; x += 54){ c.beginPath(); c.moveTo(x, cy + 6); c.lineTo(x - 10, H); c.stroke(); }
+  c.fillStyle = 'rgba(255,255,255,.22)'; for (let k = 0; k < W / 70; k++){ c.beginPath(); c.arc(28 + k * 70, cy + (H - cy) * .5 + 6, 3, 0, 7); c.fill(); }
+}
+function ninjaBG(){
+  const g = G, W = g.W, H = g.H, ge = ninjaGeom(); const key = W + 'x' + H + 'x' + g.cv.width;
+  if (g.bgKey === key && g.bg) return g.bg;
+  const bg = document.createElement('canvas'); bg.width = g.cv.width; bg.height = g.cv.height; const c = bg.getContext('2d'); const k = g.cv.width / W; c.setTransform(k, 0, 0, k, 0, 0);
+  ninjaBGDraw(c, W, H, ge); g.bg = bg; g.bgKey = key; return bg;
 }
 function ninjaDraw(){
   const g = G, c = g.cx, W = g.W, H = g.H, ge = ninjaGeom();
-  // 後牆
-  let gr = c.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, '#fff3dc'); gr.addColorStop(1, '#ffe0b8'); c.fillStyle = gr; c.fillRect(0, 0, W, H);
-  c.fillStyle = 'rgba(255,190,130,.18)'; for (let x = 0; x < W; x += 36) c.fillRect(x, 0, 18, H);
-  // 兩側布幕
-  const sw = Math.max(16, W * .045);
-  [[0, 1], [W, -1]].forEach(([x0, d]) => { c.save(); c.beginPath(); c.moveTo(x0, 0); c.lineTo(x0 + d * sw * 1.6, 0); c.quadraticCurveTo(x0 + d * sw * .6, H * .45, x0 + d * sw, H); c.lineTo(x0, H); c.closePath(); c.clip();
-    for (let k = 0; k < 6; k++){ c.fillStyle = k % 2 ? '#fff' : '#ff6f91'; c.fillRect(Math.min(x0, x0 + d * sw * 1.6) + k * sw * .3, 0, sw * .3, H); } c.restore(); });
-  // 帳篷頂（紅白條紋＋波浪邊）
-  const vh = ge.valH, n = Math.max(8, Math.round(W / 46)), stw = W / n;
-  for (let k = 0; k < n; k++){ c.fillStyle = k % 2 ? '#fffaf2' : '#ff5c7a'; c.beginPath(); c.moveTo(k * stw, 0); c.lineTo((k + 1) * stw, 0); c.lineTo((k + 1) * stw, vh); c.arc((k + .5) * stw, vh, stw / 2, 0, Math.PI); c.closePath(); c.fill(); }
-  c.fillStyle = '#ffc94d'; c.fillRect(0, 0, W, 6);
-  // 燈串
-  const ly0 = vh + stw / 2 + 6; c.strokeStyle = '#6b4a3a'; c.lineWidth = 2; c.beginPath();
-  const segs = 3; for (let s = 0; s < segs; s++){ const x0 = s * W / segs, x1 = (s + 1) * W / segs; if (!s) c.moveTo(x0, ly0); c.quadraticCurveTo((x0 + x1) / 2, ly0 + 22, x1, ly0); } c.stroke();
-  const bulbs = Math.round(W / 34); const cols = ['#ffe066', '#ff8fb8', '#7ee0b5', '#8fd0ff', '#c9a8ff'];
-  for (let k = 0; k <= bulbs; k++){ const x = k * W / bulbs; const sIdx = Math.min(segs - 1, Math.floor(x / (W / segs))); const u = (x - sIdx * W / segs) / (W / segs); const y = ly0 + 2 * u * (1 - u) * 22 + 5;
-    const on = (Math.floor(g.t * 2.5) + k) % 3 !== 0; const col = cols[k % cols.length];
-    if (on){ c.fillStyle = col + '55'; c.beginPath(); c.arc(x, y, 9, 0, 7); c.fill(); }
-    c.fillStyle = on ? col : '#e8dccb'; c.beginPath(); c.ellipse(x, y, 4.5, 6, 0, 0, 7); c.fill(); }
-  // 架子
-  [0, 1].forEach(row => { const y = ge.rowY[row] + ge.r * 1.25 + (row ? 24 : 22); c.fillStyle = '#c98b4f'; rrect(c, W * .06, y, W * .88, 10, 5); c.fill(); c.fillStyle = '#e2a868'; c.fillRect(W * .06 + 4, y + 1, W * .88 - 8, 3); });
-  // 靶
+  c.drawImage(ninjaBG(), 0, 0, W, H);
+  // 紅燈籠串（會輕輕搖、發光閃爍）
+  const ly = H * .115, sag = Math.min(26, H * .05), N = Math.max(5, Math.round(W / 78)); c.strokeStyle = '#3b2a22'; c.lineWidth = 2; c.beginPath(); c.moveTo(0, ly - sag * .2); c.quadraticCurveTo(W / 2, ly + sag * 1.6, W, ly - sag * .2); c.stroke();
+  for (let k = 0; k < N; k++){ const u = (k + .5) / N, x = u * W, y = (ly - sag * .2) * (1 - u) * (1 - u) + 2 * (1 - u) * u * (ly + sag * 1.6) + u * u * (ly - sag * .2); const sw = Math.sin(g.t * 1.7 + k) * 1.8; const fl = .8 + .2 * Math.sin(g.t * 7 + k * 2.3);
+    c.save(); c.translate(x, y); c.rotate(sw * .03); edoLantern(c, 0, 0, Math.min(15, W * .024), fl); c.restore(); }
+  // 櫻花花瓣
+  c.fillStyle = 'rgba(255,196,214,.9)'; for (let k = 0; k < 9; k++){ const px = ((k * 97 + g.t * (14 + k * 2)) % (W + 40)) - 20, py = ((k * 53 + g.t * (22 + k * 3)) % (H * .8)); c.beginPath(); c.ellipse(px, py, 3.2, 1.8, g.t + k, 0, 7); c.fill(); }
+  // 靶（小盜賊／小鬼）
   g.targets.forEach(t => ninjaTarget(c, t, ge, g));
-  // 櫃台
-  const cy = ge.cy; gr = c.createLinearGradient(0, cy, 0, H); gr.addColorStop(0, '#d9955a'); gr.addColorStop(1, '#b8733d'); c.fillStyle = gr; c.fillRect(0, cy, W, H - cy);
-  c.fillStyle = '#f0b77a'; c.fillRect(0, cy, W, 7);
-  for (let k = 0; k < W / 60; k++){ c.fillStyle = 'rgba(255,255,255,.25)'; starPath(c, 30 + k * 60, cy + (H - cy) / 2 + 4, 7, 0, 5); c.fill(); }
   // 瞄準線
   const R = g.charging ? Math.max(ninjaRange(g.charge), 30) : ge.ly * .55;
-  c.save(); c.setLineDash([3, 11]); c.lineDashOffset = -g.t * 30; c.lineCap = 'round'; c.lineWidth = 5; c.strokeStyle = g.charging ? 'rgba(255,90,138,.85)' : 'rgba(120,90,200,.55)';
+  c.save(); c.setLineDash([3, 11]); c.lineDashOffset = -g.t * 30; c.lineCap = 'round'; c.lineWidth = 5; c.strokeStyle = g.charging ? 'rgba(255,90,138,.9)' : 'rgba(255,255,255,.7)';
   const ax = Math.sin(g.angle), ay = -Math.cos(g.angle); const sx = ge.lx + ax * 34, sy = ge.ly - 12 + ay * 34;
   c.beginPath(); c.moveTo(sx, sy); c.lineTo(sx + ax * R, sy + ay * R); c.stroke(); c.restore();
   if (g.charging){ const ex = sx + ax * R, ey = sy + ay * R; c.strokeStyle = '#ff5a8a'; c.lineWidth = 3; c.beginPath(); c.arc(ex, ey, 9, 0, 7); c.stroke(); c.beginPath(); c.moveTo(ex - 13, ey); c.lineTo(ex + 13, ey); c.moveTo(ex, ey - 13); c.lineTo(ex, ey + 13); c.stroke(); }
   // 發射器（彈弓）
   ninjaLauncher(c, ge, g);
   // 力量條
-  const bx = ge.lx + 62, bh = Math.min(70, H * .16), by = ge.ly - bh + 14;
+  const bx = ge.lx + 62, bh = Math.min(70, H * .16), by = ge.ly - bh + 14; let gr;
   c.fillStyle = '#fff'; rrect(c, bx - 3, by - 3, 20, bh + 6, 8); c.fill(); c.fillStyle = '#f1e6ff'; rrect(c, bx, by, 14, bh, 6); c.fill();
   if (g.charge > 0){ gr = c.createLinearGradient(0, by + bh, 0, by); gr.addColorStop(0, '#5fd3a8'); gr.addColorStop(.6, '#ffc94d'); gr.addColorStop(1, '#ff5a8a'); c.fillStyle = gr; rrect(c, bx, by + bh * (1 - g.charge), 14, bh * g.charge, 6); c.fill(); }
   // 飛鏢
   g.shots.forEach(s => { c.globalAlpha = Math.max(0, s.alpha); drawShuriken(c, s.x, s.y, 13, s.spin); c.globalAlpha = 1; });
 }
+/* ---------- 小盜賊／小鬼：4 種造型 × 4 種被打中的表情 ---------- */
+const NK = [{n: 'oni', skin: '#ff6f6f', dk: '#d94a4a', hair: '#2f2420', horn: '#fff1c2', cloth: '#ffcf3a'}, {n: 'oni', skin: '#6fa8ff', dk: '#4a7fd6', hair: '#ff9a3c', horn: '#fff1c2', cloth: '#ff7a5a'},
+  {n: 'bandit', skin: '#ffd9b8', dk: '#e8b48c', cloth: '#2e3f7a', band: '#2e3f7a'}, {n: 'bandit', skin: '#ffd9b8', dk: '#e8b48c', cloth: '#5a3a2a', hat: '#e8c36a'}];
+function spiralEye(c, x, y, r, rot){ c.beginPath(); for (let a = 0; a < 12.5; a += .35){ const rr = r * a / 12.5; c.lineTo(x + Math.cos(a + rot) * rr, y + Math.sin(a + rot) * rr); } c.stroke(); }
+function drawFace(c, x, y, r, kind, face, t, tt){   // face: null = 平常；0 星星轉圈／1 大哭／2 咬牙／3 漩渦或叉叉眼
+  const K = NK[kind % 4], ex = r * .36, ey = y - r * .08; c.lineCap = 'round'; c.lineJoin = 'round'; const ink = '#2a1d33';
+  if (face === null || face === undefined){
+    [-1, 1].forEach(d => { c.fillStyle = '#fff'; c.beginPath(); c.ellipse(x + d * ex, ey, r * .17, r * .2, 0, 0, 7); c.fill(); c.fillStyle = ink; c.beginPath(); c.arc(x + d * ex + (t.fx || 0), ey + r * .02, r * .09, 0, 7); c.fill(); c.fillStyle = '#fff'; c.beginPath(); c.arc(x + d * ex + r * .03, ey - r * .04, r * .03, 0, 7); c.fill();
+      c.strokeStyle = ink; c.lineWidth = Math.max(2, r * .08); c.beginPath(); c.moveTo(x + d * ex - d * r * .2, ey - r * .34 - (d < 0 ? 0 : 0)); c.lineTo(x + d * ex + d * r * .2, ey - r * .2 - r * .1 * (K.n === 'oni' ? 0 : 0)); c.stroke(); });
+    c.strokeStyle = ink; c.lineWidth = Math.max(2, r * .07);
+    if (K.n === 'oni'){ c.fillStyle = '#7a1f2a'; c.beginPath(); c.moveTo(x - r * .36, y + r * .33); c.quadraticCurveTo(x, y + r * .62, x + r * .36, y + r * .33); c.quadraticCurveTo(x, y + r * .38, x - r * .36, y + r * .33); c.fill(); c.fillStyle = '#fff'; [-1, 1].forEach(d => { c.beginPath(); c.moveTo(x + d * r * .2, y + r * .36); c.lineTo(x + d * r * .3, y + r * .36); c.lineTo(x + d * r * .26, y + r * .5); c.closePath(); c.fill(); }); }
+    else if (kind === 2){ c.fillStyle = K.band; c.beginPath(); c.moveTo(x - r * .86, y + r * .08); c.quadraticCurveTo(x, y + r * .26, x + r * .86, y + r * .08); c.quadraticCurveTo(x + r * .7, y + r * .85, x, y + r * .98); c.quadraticCurveTo(x - r * .7, y + r * .85, x - r * .86, y + r * .08); c.fill(); c.fillStyle = '#fff'; for (let k = 0; k < 7; k++){ c.beginPath(); c.arc(x + (k - 3) * r * .2, y + r * (.34 + (k % 2) * .2), r * .045, 0, 7); c.fill(); } }
+    else { c.beginPath(); c.arc(x, y + r * .26, r * .22, .2, Math.PI - .2); c.stroke(); c.fillStyle = 'rgba(40,25,20,.55)'; for (let k = 0; k < 6; k++){ c.beginPath(); c.arc(x + (k - 2.5) * r * .15, y + r * (.5 + (k % 2) * .05), r * .02, 0, 7); c.fill(); } }
+    return;
+  }
+  c.strokeStyle = ink; c.fillStyle = ink; c.lineWidth = Math.max(2.2, r * .09);
+  if (face === 0){   // 暈：眼睛瞇成線＋小圈嘴巴＋星星繞頭轉
+    [-1, 1].forEach(d => { c.beginPath(); c.moveTo(x + d * ex - r * .15, ey); c.lineTo(x + d * ex + r * .15, ey + r * .03); c.stroke(); });
+    c.fillStyle = '#7a1f2a'; c.beginPath(); c.ellipse(x, y + r * .42, r * .13, r * .17, 0, 0, 7); c.fill();
+    for (let k = 0; k < 3; k++){ const a = tt * 5 + k * Math.PI * 2 / 3; c.fillStyle = '#ffd23a'; starPath(c, x + Math.cos(a) * r * .95, y - r * 1.0 + Math.sin(a) * r * .22, r * .22, a, 5); c.fill(); c.strokeStyle = '#e69500'; c.lineWidth = 1.2; c.stroke(); }
+  } else if (face === 1){   // 大哭：^ ^ 眼＋淚水＋張大嘴
+    [-1, 1].forEach(d => { c.beginPath(); c.arc(x + d * ex, ey + r * .05, r * .15, Math.PI + .3, -.3); c.stroke();
+      for (let k = 0; k < 3; k++){ const ph = (tt * 1.8 + k * .34 + (d > 0 ? .17 : 0)) % 1; c.fillStyle = 'rgba(90,170,255,.9)'; c.beginPath(); c.ellipse(x + d * (ex + r * .1 + ph * r * .12), ey + r * .12 + ph * r * .8, r * .06, r * .09, 0, 0, 7); c.fill(); }
+      c.fillStyle = 'rgba(90,170,255,.55)'; c.fillRect(x + d * ex - r * .04, ey + r * .1, r * .08, r * .5); });
+    c.fillStyle = '#7a1f2a'; c.beginPath(); c.ellipse(x, y + r * .46, r * .24, r * .2, 0, 0, 7); c.fill(); c.fillStyle = '#ff8fa3'; c.beginPath(); c.ellipse(x, y + r * .53, r * .13, r * .08, 0, 0, 7); c.fill();
+  } else if (face === 2){   // 咬牙：> < 眼＋露齒＋青筋
+    c.beginPath(); c.moveTo(x - ex - r * .15, ey - r * .12); c.lineTo(x - ex + r * .12, ey); c.lineTo(x - ex - r * .15, ey + r * .12); c.moveTo(x + ex + r * .15, ey - r * .12); c.lineTo(x + ex - r * .12, ey); c.lineTo(x + ex + r * .15, ey + r * .12); c.stroke();
+    c.fillStyle = '#fff'; rrect(c, x - r * .3, y + r * .33, r * .6, r * .24, r * .06); c.fill(); c.strokeStyle = ink; c.lineWidth = Math.max(1.8, r * .07); c.stroke(); c.lineWidth = 1.2; for (let k = 1; k < 4; k++){ c.beginPath(); c.moveTo(x - r * .3 + k * r * .15, y + r * .33); c.lineTo(x - r * .3 + k * r * .15, y + r * .57); c.stroke(); } c.beginPath(); c.moveTo(x - r * .3, y + r * .45); c.lineTo(x + r * .3, y + r * .45); c.stroke();
+    c.strokeStyle = '#e8342f'; c.lineWidth = Math.max(2, r * .07); const vx = x + r * .5, vy = y - r * .62; c.beginPath(); c.moveTo(vx - r * .1, vy); c.lineTo(vx + r * .1, vy); c.moveTo(vx, vy - r * .1); c.lineTo(vx, vy + r * .1); c.stroke();
+    c.fillStyle = 'rgba(120,200,255,.9)'; c.beginPath(); c.moveTo(x - r * .75, y - r * .3); c.quadraticCurveTo(x - r * .62, y - r * .1, x - r * .75, y - r * .02); c.quadraticCurveTo(x - r * .88, y - r * .1, x - r * .75, y - r * .3); c.fill();
+  } else {   // 漩渦眼（小鬼）或叉叉眼（小盜賊）＋吐舌頭
+    [-1, 1].forEach(d => { if (kind % 2 === 0){ c.beginPath(); c.moveTo(x + d * ex - r * .13, ey - r * .13); c.lineTo(x + d * ex + r * .13, ey + r * .13); c.moveTo(x + d * ex + r * .13, ey - r * .13); c.lineTo(x + d * ex - r * .13, ey + r * .13); c.stroke(); } else { c.lineWidth = Math.max(1.6, r * .06); spiralEye(c, x + d * ex, ey, r * .19, tt * 8 * d); } });
+    c.lineWidth = Math.max(2.2, r * .08); c.beginPath(); c.moveTo(x - r * .22, y + r * .38); c.quadraticCurveTo(x, y + r * .3, x + r * .22, y + r * .38); c.stroke();
+    c.fillStyle = '#ff7a95'; c.beginPath(); c.moveTo(x - r * .06, y + r * .37); c.lineTo(x + r * .16, y + r * .37); c.lineTo(x + r * .16, y + r * .55); c.arc(x + r * .05, y + r * .55, r * .11, 0, Math.PI); c.closePath(); c.fill();
+  }
+}
+function drawHead(c, x, y, r, kind, face, t, tt){
+  const K = NK[kind % 4];
+  // 身體（和服／虎紋兜襠）＋手
+  const bw = r * 1.5; c.fillStyle = K.cloth; rrect(c, x - bw / 2, y + r * .7, bw, r * 1.6, r * .3); c.fill();
+  if (K.n === 'oni'){ c.fillStyle = '#2a1d33'; for (let k = -2; k <= 2; k++){ c.beginPath(); c.moveTo(x + k * r * .26 - r * .06, y + r * .78); c.lineTo(x + k * r * .26 + r * .06, y + r * .78); c.lineTo(x + k * r * .26, y + r * 1.05); c.fill(); } }
+  else { c.fillStyle = 'rgba(255,255,255,.55)'; for (let k = 0; k < 5; k++){ c.beginPath(); c.arc(x + (k - 2) * r * .28, y + r * (1.0 + (k % 2) * .25), r * .05, 0, 7); c.fill(); } }
+  // 頭
+  if (K.n === 'oni'){   // 角＋蓬蓬頭髮
+    c.fillStyle = K.hair; c.beginPath(); for (let k = 0; k < 7; k++){ const a = Math.PI + k * Math.PI / 6; c.lineTo(x + Math.cos(a) * r * 1.12, y - r * .15 + Math.sin(a) * r * 1.1); c.lineTo(x + Math.cos(a + .26) * r * .96, y - r * .15 + Math.sin(a + .26) * r * .95); } c.fill();
+    c.fillStyle = K.horn; [-1, 1].forEach(d => { c.beginPath(); c.moveTo(x + d * r * .3, y - r * .82); c.lineTo(x + d * r * .62, y - r * 1.5); c.lineTo(x + d * r * .74, y - r * .72); c.closePath(); c.fill(); c.strokeStyle = '#e0c27a'; c.lineWidth = 1.5; c.stroke(); });
+  }
+  c.fillStyle = K.skin; c.beginPath(); c.arc(x, y, r, 0, 7); c.fill(); c.fillStyle = K.dk; c.beginPath(); c.arc(x, y, r, .25, Math.PI - .25); c.lineTo(x, y); c.globalAlpha = .18; c.fill(); c.globalAlpha = 1;
+  c.fillStyle = 'rgba(255,110,140,.5)'; [-1, 1].forEach(d => { c.beginPath(); c.ellipse(x + d * r * .62, y + r * .18, r * .15, r * .1, 0, 0, 7); c.fill(); });
+  if (kind === 2){ c.fillStyle = K.band; c.beginPath(); c.moveTo(x - r * 1.02, y - r * .18); c.quadraticCurveTo(x, y - r * 1.45, x + r * 1.02, y - r * .18); c.quadraticCurveTo(x, y - r * .5, x - r * 1.02, y - r * .18); c.fill(); c.fillStyle = '#fff'; for (let k = 0; k < 6; k++){ c.beginPath(); c.arc(x + (k - 2.5) * r * .3, y - r * (.62 + (k % 2) * .08), r * .045, 0, 7); c.fill(); } c.fillStyle = K.band; c.beginPath(); c.arc(x + r * 1.0, y - r * .22, r * .16, 0, 7); c.arc(x + r * 1.18, y - r * .02, r * .13, 0, 7); c.fill(); }
+  drawFace(c, x, y, r, kind, face, t, tt);
+  if (kind === 3){ c.fillStyle = K.hat; c.beginPath(); c.moveTo(x - r * 1.35, y - r * .32); c.lineTo(x, y - r * 1.5); c.lineTo(x + r * 1.35, y - r * .32); c.quadraticCurveTo(x, y - r * .5, x - r * 1.35, y - r * .32); c.fill(); c.strokeStyle = '#a8812f'; c.lineWidth = 1.6; c.stroke(); for (let k = -2; k <= 2; k++){ c.beginPath(); c.moveTo(x + k * r * .12, y - r * 1.3 + Math.abs(k) * r * .1); c.lineTo(x + k * r * .5, y - r * .42); c.stroke(); } c.strokeStyle = '#7a1f2a'; c.lineWidth = 2; c.beginPath(); c.moveTo(x - r * .72, y - r * .3); c.lineTo(x - r * .6, y + r * .5); c.moveTo(x + r * .72, y - r * .3); c.lineTo(x + r * .6, y + r * .5); c.stroke(); }
+}
 function ninjaTarget(c, t, ge, g){
-  const r = ge.r; let x = t.x + (t.shake ? Math.sin(g.t * 50) * 6 * t.shake : 0); const y = t.y;
-  c.save();
-  if (t.dead){ c.globalAlpha = 1 - t.pop; c.translate(x, y); c.scale(1 + t.pop * .5, 1 + t.pop * .5); c.translate(-x, -y); }
-  // 支架
-  c.fillStyle = '#9c6b44'; c.fillRect(x - 3, y, 6, r * 1.25 + (t.row ? 24 : 22));
-  if (t.glow > 0){ c.fillStyle = `rgba(95,211,168,${.25 + .35 * Math.abs(Math.sin(g.t * 5))})`; c.beginPath(); c.arc(x, y, r * 1.45, 0, 7); c.fill(); }
-  if (t.gold){ const pu = .5 + .5 * Math.sin(g.t * 4); const hg = c.createRadialGradient(x, y, r * .5, x, y, r * (1.7 + .15 * pu)); hg.addColorStop(0, 'rgba(255,214,64,.85)'); hg.addColorStop(1, 'rgba(255,214,64,0)'); c.fillStyle = hg; c.beginPath(); c.arc(x, y, r * 1.9, 0, 7); c.fill(); }
-  const rings = t.gold ? ['#ffb000', '#fff4b8', '#ffcf3a', '#fff4b8', '#ff9f1c'] : ['#ff5c7a', '#fff', '#ff5c7a', '#fff', '#ffc94d'];
-  rings.forEach((col, k) => { c.fillStyle = col; c.beginPath(); c.arc(x, y, r * (1 - k * .19), 0, 7); c.fill(); });
-  c.strokeStyle = t.gold ? '#d98500' : '#d94a68'; c.lineWidth = 2; c.beginPath(); c.arc(x, y, r, 0, 7); c.stroke();
-  if (t.gold) gSparkles(c, x, y, r * 1.25, g.t);
-  // 字牌
+  const r = ge.r; const x = t.x + (t.shake ? Math.sin(g.t * 50) * 6 * t.shake : 0); const y = t.y; const ledge = t.y + r * 1.25 + (t.row ? 24 : 22);
+  c.save(); c.beginPath(); c.rect(0, 0, g.W, ledge + 3); c.clip();   // 被打中後往下沉，沉到欄杆後面就看不到了
+  const sink = t.sink || 0; if (sink) c.translate(0, sink * (r * 3.2 + 40));
+  if (t.gold){ const pu = .5 + .5 * Math.sin(g.t * 4); const hg = c.createRadialGradient(x, y + r * .3, r * .4, x, y + r * .3, r * (1.9 + .2 * pu)); hg.addColorStop(0, 'rgba(255,214,64,.9)'); hg.addColorStop(1, 'rgba(255,214,64,0)'); c.fillStyle = hg; c.beginPath(); c.arc(x, y + r * .3, r * 2.1, 0, 7); c.fill(); }
+  else if (t.glow > 0){ c.fillStyle = `rgba(95,211,168,${.25 + .35 * Math.abs(Math.sin(g.t * 5))})`; c.beginPath(); c.arc(x, y + r * .3, r * 1.6, 0, 7); c.fill(); }
+  const bob = t.dead ? 0 : Math.sin(g.t * 2.2 + (t.ph || 0)) * 1.5; c.translate(0, bob);
+  drawHead(c, x, y, r, t.kind || 0, t.dead ? t.face : null, t, g.t);
+  // 字牌（木牌＋繩子），小手抓著
   const maxW = Math.max(r * 2.9, 84); const fs = fitFont(c, t.w, maxW - 16, Math.round(Math.max(15, Math.min(21, r * .5))), 11);
-  const tw = c.measureText(t.w).width; const lw = tw + 20, lh = fs + 12; t.lw = lw; t.lh = lh;
-  const py = y + r * .45;
-  c.fillStyle = 'rgba(0,0,0,.12)'; rrect(c, x - lw / 2 + 2, py + 3, lw, lh, lh / 2); c.fill();
-  c.fillStyle = t.glow > 0 ? '#dff8ee' : t.gold ? '#fff0a8' : '#fffdf7'; rrect(c, x - lw / 2, py, lw, lh, lh / 2); c.fill();
-  c.strokeStyle = t.glow > 0 ? '#2fb380' : t.gold ? '#e69500' : '#8a6bd9'; c.lineWidth = 2.5; c.stroke();
-  c.fillStyle = '#3b3350'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(t.w, x, py + lh / 2 + 1);
+  const tw = c.measureText(t.w).width; const lw = tw + 22, lh = fs + 12; t.lw = lw; t.lh = lh; const py = y + r * .45;
+  c.fillStyle = (NK[(t.kind || 0) % 4]).skin; [-1, 1].forEach(d => { c.beginPath(); c.arc(x + d * (lw / 2 - 2), py + lh * .6, r * .2, 0, 7); c.fill(); c.strokeStyle = 'rgba(0,0,0,.25)'; c.lineWidth = 1; c.stroke(); });
+  c.fillStyle = 'rgba(0,0,0,.2)'; rrect(c, x - lw / 2 + 2, py + 3, lw, lh, 7); c.fill();
+  c.fillStyle = t.glow > 0 ? '#c9f3df' : t.gold ? '#ffe680' : '#f6e0b0'; rrect(c, x - lw / 2, py, lw, lh, 7); c.fill();
+  c.strokeStyle = t.glow > 0 ? '#2fb380' : t.gold ? '#e69500' : '#8a5a2b'; c.lineWidth = 2.5; c.stroke();
+  c.strokeStyle = 'rgba(138,90,43,.35)'; c.lineWidth = 1; [.33, .66].forEach(k => { c.beginPath(); c.moveTo(x - lw / 2 + 4, py + lh * k); c.lineTo(x + lw / 2 - 4, py + lh * k); c.stroke(); });
+  c.fillStyle = '#8a5a2b'; [-1, 1].forEach(d => { c.beginPath(); c.arc(x + d * (lw / 2 - 6), py + 5, 2, 0, 7); c.fill(); });
+  c.fillStyle = '#3b2a22'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(t.w, x, py + lh / 2 + 1);
+  if (t.gold) gSparkles(c, x, y + r * .4, r * 1.3, g.t);
   c.restore();
 }
 function drawShuriken(c, x, y, r, rot){
@@ -2212,7 +2318,7 @@ function drawShuriken(c, x, y, r, rot){
 function ninjaLauncher(c, ge, g){
   const x = ge.lx, y = ge.ly;
   // 底座
-  c.fillStyle = '#7b5ad6'; rrect(c, x - 34, y + 4, 68, 22, 11); c.fill(); c.fillStyle = '#a98bff'; rrect(c, x - 30, y + 6, 60, 8, 4); c.fill();
+  c.fillStyle = '#8f2d2d'; rrect(c, x - 34, y + 4, 68, 22, 11); c.fill(); c.fillStyle = '#d4584f'; rrect(c, x - 30, y + 6, 60, 8, 4); c.fill();
   c.save(); c.translate(x, y - 2); c.rotate(g.angle);
   const pull = g.charging ? g.charge * 14 : 0;
   // 彈弓 Y 形
@@ -2260,10 +2366,21 @@ function dinoDeck(N){
   const recent = new Set(QRECENT);
   let pref = DB ? pool.filter(x => DB.has(x.w)) : pool; if (pref.length < R) pref = pool;
   let fresh = pref.filter(x => !recent.has(x.w)); if (fresh.length < R) fresh = pref;
-  const picks = shuffle(fresh.slice()).slice(0, R); for (const x of shuffle(pool.slice())){ if (picks.length >= R) break; if (!picks.includes(x)) picks.push(x); }
+  const singles = (x, k) => [...x[k].keys()].filter(w => /^[a-z]+$/i.test(w)).length;   // 這個模式至少要有 3 個單字可以吃
+  const taken = new Set(); const plan = []; let want = Math.random() < .5 ? 'syn' : 'ant';
+  for (let r = 0; r < R; r++){
+    let m = want, other = m === 'syn' ? 'ant' : 'syn'; const free = L => L.filter(x => !taken.has(x));
+    let cand = shuffle(free(fresh).filter(x => singles(x, m) >= 3));
+    if (!cand.length){ m = other; cand = shuffle(free(fresh).filter(x => singles(x, m) >= 3)); }
+    if (!cand.length) cand = shuffle(free(pool).filter(x => singles(x, m) >= 3));
+    if (!cand.length){ m = want; cand = shuffle(free(pool)); }
+    taken.add(cand[0]); plan.push({p: cand[0], mode: m}); want = want === 'syn' ? 'ant' : 'syn';
+  }
+  const picks = plan.map(x => x.p);
   const fillPool = (DB ? [...DB] : VOCAB.map(o => o.w)).filter(x => /^[a-z]{3,9}$/.test(x)); const used = new Set();
-  let mode = Math.random() < .5 ? 'syn' : 'ant'; const rounds = [], items = [];
+  const rounds = [], items = [];
   picks.forEach((p, r) => {
+    const mode = plan[r].mode;
     const other = mode === 'syn' ? 'ant' : 'syn'; const one = m => shuffle([...m.entries()].filter(([k]) => /^[a-z]+$/i.test(k)));
     const good = one(p[mode]).slice(0, 4), bad = one(p[other]).slice(0, 2);
     const nU = DINO_WORDS - good.length - bad.length; const rel = new Set([...p.syn.keys(), ...p.ant.keys()]);
@@ -2275,7 +2392,6 @@ function dinoDeck(N){
     items.push(...shuffle(its));
     const all = m => [...m.entries()].map(([w, zh]) => ({w, zh: shortZh(zh || '') || gZh(w)}));
     rounds.push({target: p.w, tzh: p.zh, mode, syn: all(p.syn), ant: all(p.ant), eaten: {}, shown: {}});
-    mode = other;
   });
   qRemember(picks.map(x => x.w));
   return {items, rounds, note: ''};
@@ -2476,12 +2592,16 @@ function drawDino(c, x, gy, s, face, open, mood, t){
 
 /* ---- 測試用小掛勾 ---- */
 window.__game = {
-  get(){ const g = G; if (!g) return {kind: null, last: G_LAST}; const it = g.items[g.i] || {}; return {kind: g.kind, t: g.t, i: g.i, n: g.items.length, score: g.score, right: g.right, answer: it.answer, w: it.w, mode: it.mode, opts: it.opts, angle: g.angle, charge: g.charge, charging: !!g.charging, lock: !!g.lock, paused: !!g.paused, reveal: g.reveal, lane: g.lane, nl: g.nl, correctLane: (g.words || []).filter(w => w.ok).map(w => w.lane)[0], targets: (g.targets || []).map(t => ({w: t.w, ok: t.ok, x: t.x, y: t.y})), shots: (g.shots || []).length, W: g.W, H: g.H, combo: g.combo, maxCombo: g.maxCombo, spd: g.spd, bd: g.bd, gold: !!it.gold, decoy: !!it.decoy, words: (g.words || []).map(w => ({w: w.w, y: w.y, lane: w.lane, ok: w.ok, gold: !!w.gold, rel: w.rel, good: w.good, bad: w.bad, state: w.state})), zap: g.zap, phase: g.rd && g.rd.phase, T: g.rd && g.rd.T, rt: g.rd && g.rd.t, ri: g.ri, nr: g.rounds && g.rounds.length, target: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].target, dmode: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].mode, mcd: g.mcd, stats: g.stats, goldTargets: (g.targets || g.words || []).filter(t => t.gold).map(t => ({w: t.w, ok: t.ok})), last: G_LAST}; },
+  get(){ const g = G; if (!g) return {kind: null, last: G_LAST}; const it = g.items[g.i] || {}; return {kind: g.kind, t: g.t, i: g.i, n: g.items.length, score: g.score, right: g.right, answer: it.answer, w: it.w, mode: it.mode, opts: it.opts, angle: g.angle, charge: g.charge, charging: !!g.charging, lock: !!g.lock, paused: !!g.paused, reveal: g.reveal, lane: g.lane, nl: g.nl, correctLane: (g.words || []).filter(w => w.ok).map(w => w.lane)[0], targets: (g.targets || []).map(t => ({w: t.w, ok: t.ok, x: t.x, y: t.y, face: t.face, sink: t.sink, dead: !!t.dead, kind: t.kind, gold: !!t.gold})), shots: (g.shots || []).length, W: g.W, H: g.H, combo: g.combo, maxCombo: g.maxCombo, spd: g.spd, bd: g.bd, gold: !!it.gold, decoy: !!it.decoy, words: (g.words || []).map(w => ({w: w.w, y: w.y, lane: w.lane, ok: w.ok, gold: !!w.gold, rel: w.rel, good: w.good, bad: w.bad, state: w.state})), zap: g.zap, phase: g.rd && g.rd.phase, T: g.rd && g.rd.T, rt: g.rd && g.rd.t, ri: g.ri, nr: g.rounds && g.rounds.length, target: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].target, dmode: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].mode, mcd: g.mcd, stats: g.stats, goldTargets: (g.targets || g.words || []).filter(t => t.gold).map(t => ({w: t.w, ok: t.ok})), last: G_LAST}; },
   freeze(on){ if (G) G.freeze = on !== false; },
   speed(m){ if (G) G.speedMul = m; },
   aimAt(k){ const g = G; if (!g || !g.targets) return; const t = k == null ? g.targets.find(x => x.ok) : g.targets[k]; const ge = ninjaGeom(); g.angle = Math.atan2(t.x - ge.lx, (ge.ly - 12) - t.y); return g.angle; },
   hit(ok){ const g = G; if (!g) return false; if (g.kind === 'dino') return dinoForce(ok === false ? 'bad' : 'good'); if (g.lock) return false; if (g.kind === 'ninja'){ const t = g.targets.find(x => x.ok === (ok !== false)); ninjaHit(t); return true; } return false; },
   eat: kind => dinoForce(kind),
+  forceFace: n => { if (G) G.forceFace = n; },
+  faceSheet: () => { const cv = document.createElement('canvas'); cv.width = 600; cv.height = 480; cv.id = 'faceSheet'; cv.style.cssText = 'position:fixed;left:10px;top:10px;z-index:99999;background:#7b4f9f;border:3px solid #fff'; document.body.appendChild(cv); const c = cv.getContext('2d'); c.fillStyle = '#e9c9a0'; c.fillRect(0, 0, 600, 480);
+    for (let k = 0; k < 4; k++) for (let f = -1; f < 4; f++){ const x = 60 + (f + 1) * 105, y = 60 + k * 115; c.save(); c.beginPath(); c.rect(x - 52, y - 58, 104, 112); c.clip(); drawHead(c, x, y, 38, k, f < 0 ? null : f, {}, 1.2); c.restore(); }
+    return true; },
   skipIntro: () => { const g = G; if (g && g.rd && g.rd.phase === 'intro'){ g.rd.pt = 0; } },
   skipRound: () => dinoSkipRound(),
   dinoRounds: () => G && G.rounds ? G.rounds.map(r => ({target: r.target, mode: r.mode, syn: r.syn, ant: r.ant})) : null,
