@@ -2397,30 +2397,40 @@ function dinoDeck(N){
   return {items, rounds, note: ''};
 }
 function dinoRoundText(){ const g = G, rd = g.rd; if (!rd) return `回合 1／${g.rounds.length}`; const left = Math.max(0, Math.ceil(rd.T - rd.t)); return `回合 ${g.ri + 1}／${g.rounds.length}${rd.phase === 'play' ? `　⏱ ${left} 秒` : ''}`; }
+
 function dinoInit(){
-  const g = G; Object.assign(g, {lane: 0, dx: null, face: 1, chomp: 0, words: [], mood: '', moodT: 0, zap: 0, mcd: 0, ri: 0, rd: null, mEaten: 0, stats: {ok: 0, bad: 0, zap: 0, miss: 0}, clouds: [0, .35, .7].map(p => ({p, y: .1 + Math.random() * .15})), hearts: [],
+  const g = G; Object.assign(g, {dx: 0, vx: 0, face: 1, chomp: 0, words: [], mood: '', moodT: 0, zap: 0, ri: 0, rd: null, mEaten: 0, stats: {ok: 0, bad: 0, zap: 0, miss: 0}, clouds: [0, .35, .7].map(p => ({p, y: .1 + Math.random() * .15})), hearts: [], keys: {}, btn: 0, follow: null, wall: 0,
     matchTotal: g.items.filter(it => it.rel === g.rounds[it.round].mode).length});
-  $('#gCtrl').innerHTML = `<button class="gbtn dir wide big" id="gL" aria-label="往左走"><b>◀<\/b><small>往左<\/small><\/button>
-    <div class="ghint">⌨️ 鍵盤方向鍵 ◀ ▶ 也可以<br>👆 點畫面或左右滑也行<\/div>
-    <button class="gbtn dir wide big" id="gR" aria-label="往右走"><b>▶<\/b><small>往右<\/small><\/button>`;
-  const rep_ = (id, d) => { let iv = null; holdBtn($(id), on => { if (iv){ clearInterval(iv); iv = null; } if (on){ dinoMove(d); iv = setInterval(() => { if (!G || G !== g){ clearInterval(iv); return; } dinoMove(d); }, 150); } }); };
-  rep_('#gL', -1); rep_('#gR', 1);
+  $('#gCtrl').innerHTML = `<button class="gbtn dir wide big" id="gL" aria-label="按住往左走"><b>◀<\/b><small>按住往左<\/small><\/button>
+    <div class="ghint">⌨️ 按住方向鍵 ◀ ▶ 就會一直走<br>👆 手指在畫面上拖曳，恐龍會跟著你<\/div>
+    <button class="gbtn dir wide big" id="gR" aria-label="按住往右走"><b>▶<\/b><small>按住往右<\/small><\/button>`;
+  holdBtn($('#gL'), on => { g.btnL = on; }); holdBtn($('#gR'), on => { g.btnR = on; });
   g.newRound = dinoStartRound; g.update = dinoUpdate; g.draw = dinoDraw;
-  g.onKey = (e, down) => { const k = e.key; if (k === 'ArrowLeft' || k === 'ArrowRight' || k === 'a' || k === 'd' || k === 'A' || k === 'D'){ if (down) dinoMove(k === 'ArrowLeft' || k === 'a' || k === 'A' ? -1 : 1); return true; } return false; };
+  const KD = {ArrowLeft: -1, a: -1, A: -1, ArrowRight: 1, d: 1, D: 1};
+  g.onKey = (e, down) => { const d = KD[e.key]; if (!d) return false; if (down) g.keys[e.key] = d; else delete g.keys[e.key]; return true; };
   g.layout = () => {};
-  gCanvasInit(); g.nl = g.W >= 700 ? 5 : 4;
-  let sx = null, sid = null;
-  g.cv.addEventListener('pointerdown', e => { e.preventDefault(); sid = e.pointerId; sx = e.clientX; try{ g.cv.setPointerCapture(e.pointerId); }catch(_){} gUnlockAudio(); });
-  const up = e => { if (sid !== e.pointerId || sx === null) return; const d = e.clientX - sx; sx = null; sid = null; if (!G || G !== g) return;
-    if (Math.abs(d) > 28) dinoMove(d > 0 ? 1 : -1); else { const r = g.cv.getBoundingClientRect(); const n = g.nl; dinoGo(Math.max(0, Math.min(n - 1, Math.floor((e.clientX - r.left) / (r.width / n))))); } };
-  g.cv.addEventListener('pointerup', up); g.cv.addEventListener('pointercancel', () => { sx = null; sid = null; });
-  g.lane = Math.floor((g.nl - 1) / 2); g.dx = (g.lane + .5) * dinoGeom().lw;
+  gCanvasInit();
+  g.cv.addEventListener('pointerdown', e => { e.preventDefault(); g.pid = e.pointerId; try{ g.cv.setPointerCapture(e.pointerId); }catch(_){} gUnlockAudio(); const r = g.cv.getBoundingClientRect(); g.follow = (e.clientX - r.left) * (g.W / r.width); });
+  g.cv.addEventListener('pointermove', e => { if (g.pid !== e.pointerId) return; const r = g.cv.getBoundingClientRect(); g.follow = (e.clientX - r.left) * (g.W / r.width); });
+  const up = e => { if (g.pid === e.pointerId){ g.pid = null; g.follow = null; } };
+  g.cv.addEventListener('pointerup', up); g.cv.addEventListener('pointercancel', up);
+  window.addEventListener('blur', () => { g.keys = {}; g.btnL = g.btnR = false; });
+  g.dx = g.W / 2;
   dinoStartRound(); gRun();
 }
-function dinoGeom(){ const {W, H} = G; const n = G.nl || 4; const lw = W / n; const gy = H - Math.max(26, H * .08); const ds = Math.min(lw * .8, H * .27, 128); return {n, lw, gy, ds, mouthY: gy - ds * .82}; }
-function dinoGo(l){ const g = G; if (!g || l === g.lane) return; if (g.mcd > 0) return; g.mcd = g.zap > 0 ? .3 : .09; g.face = l > g.lane ? 1 : -1; g.lane = l; blip('step'); }
-function dinoMove(d){ const g = G; if (!g) return; dinoGo(Math.max(0, Math.min((g.nl || 4) - 1, g.lane + d))); }
-function dinoV(){ return G.H / 11 * G.speedMul * G.spd; }
+
+/* 恐龍可以左右連續移動（類比），左右兩邊各有一座小山擋住，不能走過去 */
+function dinoGeom(){
+  const {W, H} = G; const gy = H - Math.max(26, H * .08); const ds = Math.min(W * .2, H * .27, 128); const mw = Math.max(40, Math.min(96, W * .08));
+  const px0 = mw, px1 = W - mw;
+  return {gy, ds, dinoW: ds * .9, hw: ds * .32, mw, px0, px1, c0: px0 + ds * .3, c1: px1 - ds * .3, hitTop: gy - ds * 1.02, hitBot: gy - ds * .35, mouthY: gy - ds * .82, vmax: dinoVmax(W)};
+}
+// 恐龍最大水平速度：隨掉落速度等級變快（掉得越快，走得越快），這樣每一級都躲得掉
+function dinoVmax(W){ const m = SPEEDS[GS.speed][1]; return W * .55 * Math.sqrt(m / .7) * (G && G.bonus ? 1.25 : 1); }
+
+
+
+function dinoV(){ return G.H / 11 * G.speedMul * G.spd * 3 * (G.bonus ? 2 : 1); }   // 每一級掉落速度都是原本的 3 倍
 function dinoStartRound(){
   const g = G, rd0 = g.rounds[g.ri]; g.words = []; const ge = dinoGeom();
   const its = g.items.filter(it => it.round === g.ri); const F = (ge.gy + 44) / dinoV();
@@ -2430,18 +2440,34 @@ function dinoStartRound(){
   $('#gPrompt').innerHTML = `<div class="dprompt"><span class="dlabel">🎯 目標字<\/span><b class="dt en">${esc(rd0.target)}<\/b><span class="dtz">${esc(rd0.tzh)}<\/span><span class="dmode ${rd0.mode}">${ic} ${nm}<\/span><\/div><div class="dsub">只吃<b>${ds}<\/b>：吃對 <b class="p">+1<\/b>・吃到相反的 <b class="m">−1<\/b>・不相關的字會 <b class="z">⚡ 電到<\/b>（不扣分，但會變慢 0.5 秒）<\/div>`;
   gHud(); gMsg(`<div class="gm1">第 ${g.ri + 1} 回合<\/div><div>目標字 <b class="en">${esc(rd0.target)}<\/b>（${esc(rd0.tzh)}）<\/div><div class="dmode ${rd0.mode}" style="display:inline-block;margin-top:4px">${ic} ${nm}<\/div>`, 'info');
 }
+
+const DINO_FS = ge => Math.round(Math.max(15, Math.min(22, ge.ds * .19)));
+let DINO_MC = null;
+function dinoTextW(text, fs){ DINO_MC = DINO_MC || document.createElement('canvas').getContext('2d'); DINO_MC.font = `800 ${fs}px ${G_FONT}`; return DINO_MC.measureText(text).width; }
+function dinoBw(text, ge){ const fs = DINO_FS(ge); return Math.min(Math.min(G.W * .36, 190), dinoTextW(text, fs) + 30); }
 function dinoSpawn(it){
-  const g = G, rd = g.rd, mode = g.rounds[rd.r].mode, nl = g.nl; const clear = [];
-  for (let l = 0; l < nl; l++) if (!g.words.some(w => w.lane === l && w.state === 'fall' && w.y < 70)) clear.push(l);
-  if (!clear.length) return false;
-  const lane = clear[Math.floor(Math.random() * clear.length)]; const cols = ['#ffd6e7', '#fff1b8', '#d4f5e4', '#dcecff', '#ece2ff'];
-  g.words.push({w: it.w, zh: it.zh, rel: it.rel, good: it.rel === mode, bad: it.rel !== 'none' && it.rel !== mode, gold: !!(it.gold || it.decoy), lane, y: -30, col: cols[g.words.length % cols.length], state: 'fall', a: 1, glow: 0, wob: Math.random() * 6});
+  const g = G, rd = g.rd, mode = g.rounds[rd.r].mode, ge = dinoGeom(); const bw = dinoBw(it.w, ge);
+  const lo = ge.px0 + bw / 2, hi = ge.px1 - bw / 2; let x = null;
+  for (let t = 0; t < 30 && x === null; t++){ const c = lo + Math.random() * (hi - lo);
+    if (g.words.every(w => w.state !== 'fall' || w.y > 90 || Math.abs(w.x - c) >= 1.6 * ge.dinoW + (w.bw + bw) / 2)) x = c; }
+  if (x === null) return false;
+  const cols = ['#ffd6e7', '#fff1b8', '#d4f5e4', '#dcecff', '#ece2ff'];
+  g.words.push({w: it.w, zh: it.zh, rel: it.rel, good: it.rel === mode, bad: it.rel !== 'none' && it.rel !== mode, gold: !!(it.gold || it.decoy), x, bw, y: -30, col: cols[g.words.length % cols.length], state: 'fall', a: 1, glow: 0, wob: Math.random() * 6});
   g.rounds[rd.r].shown[it.w] = 1; return true;
 }
+
 function dinoUpdate(dt){
   const g = G, ge = dinoGeom(), rd = g.rd;
-  g.zap = Math.max(0, g.zap - dt); g.mcd = Math.max(0, g.mcd - dt);
-  const tx = (g.lane + .5) * ge.lw; g.dx += (tx - g.dx) * Math.min(1, dt * (g.zap > 0 ? 2 : 9));
+  g.zap = Math.max(0, g.zap - dt);
+  // ---- 連續移動：按住鍵／按鈕 → 加速；放開 → 順順地減速；手指拖曳 → 跟著走；兩邊被小山擋住 ----
+  const dir = (g.btnR ? 1 : 0) - (g.btnL ? 1 : 0) + Object.values(g.keys).reduce((a, b) => a + b, 0);
+  const vmax = ge.vmax * (g.zap > 0 ? .45 : 1); let want = Math.max(-1, Math.min(1, dir)) * vmax;
+  if (!dir && g.follow != null){ const d = g.follow - g.dx; want = Math.abs(d) < 4 ? 0 : Math.max(-vmax, Math.min(vmax, d * 7)); }
+  const acc = vmax * (want === 0 ? 9 : 6.5) * dt; g.vx += Math.max(-acc, Math.min(acc, want - g.vx));
+  if (Math.abs(g.vx) > vmax) g.vx = Math.sign(g.vx) * vmax;
+  g.dx += g.vx * dt; g.wall = 0;
+  if (g.dx <= ge.c0){ g.dx = ge.c0; if (g.vx < 0) g.vx = 0; g.wall = -1; } else if (g.dx >= ge.c1){ g.dx = ge.c1; if (g.vx > 0) g.vx = 0; g.wall = 1; }
+  if (Math.abs(g.vx) > 25) g.face = g.vx > 0 ? 1 : -1;
   g.chomp = Math.max(0, g.chomp - dt * 3); g.moodT = Math.max(0, g.moodT - dt); if (!g.moodT) g.mood = '';
   g.clouds.forEach(cl => { cl.p = (cl.p + dt * .012) % 1.2; });
   g.hearts.forEach(h => { h.y -= 50 * dt; h.life -= dt; }); g.hearts = g.hearts.filter(h => h.life > 0);
@@ -2455,10 +2481,10 @@ function dinoUpdate(dt){
     w.glow = Math.max(0, w.glow - dt * .2);
     if (w.state === 'fall'){
       if (rd.phase === 'play' && !g.freeze) w.y += v * dt;
-      const bh = 40, bottom = w.y + bh / 2; const wx = (w.lane + .5) * ge.lw;
-      if (Math.abs(g.dx - wx) < ge.lw * .45 && bottom > ge.mouthY - 60 && bottom < ge.mouthY + 10) near = true;
-      if (bottom >= ge.mouthY && Math.abs(g.dx - wx) < ge.lw * .42){ dinoEat(w, wx); continue; }
-      if (w.y - bh / 2 > ge.gy - 6){ w.state = 'fade'; if (w.good) g.stats.miss++; }
+      const bh = 40, bottom = w.y + bh / 2, top = w.y - bh / 2; const ox = Math.abs(g.dx - w.x) < ge.hw + w.bw / 2 - 6;
+      if (ox && bottom > ge.hitTop - 70 && bottom < ge.hitTop + 10) near = true;
+      if (ox && bottom >= ge.hitTop && top <= ge.hitBot){ dinoEat(w, w.x); continue; }
+      if (top > ge.gy - 6){ w.state = 'fade'; if (w.good) g.stats.miss++; }
     } else if (w.state === 'fade' || w.state === 'eaten'){ w.a -= dt * (w.state === 'eaten' ? 5 : 2.5); if (w.state === 'eaten') w.y += (ge.mouthY - w.y) * Math.min(1, dt * 12); }
   }
   g.words = g.words.filter(w => w.a > 0);
@@ -2495,7 +2521,7 @@ function dinoForce(kind){   // 測試用：直接讓恐龍吃到某一種字
   let w = g.words.find(x => x.state === 'fall' && (kind === 'good' ? x.good : kind === 'bad' ? x.bad : x.rel === 'none'));
   if (!w){ const k = rd.items.findIndex((it, j) => j >= rd.spawned && want(it)); if (k < 0) return null;
     const it = rd.items.splice(k, 1)[0]; rd.items.splice(rd.spawned, 0, it); if (!dinoSpawn(it)) return null; rd.spawned++; w = g.words[g.words.length - 1]; }
-  dinoEat(w, (w.lane + .5) * dinoGeom().lw); return {w: w.w, gold: w.gold};
+  dinoEat(w, w.x); return {w: w.w, gold: w.gold};
 }
 function dinoSkipRound(){ const g = G; if (!g || !g.rd) return; const rd = g.rd; rd.phase = 'play'; rd.spawned = rd.items.length; g.words.forEach(w => { if (w.state === 'fall') w.state = 'fade'; }); gMsg(''); }
 function dinoResultsHTML(g){
@@ -2518,16 +2544,16 @@ function dinoDraw(){
   g.clouds.forEach(cl => { const x = cl.p * (W + 160) - 80, y = cl.y * H; c.fillStyle = 'rgba(255,255,255,.9)'; c.beginPath(); c.arc(x, y, 18, 0, 7); c.arc(x + 20, y - 8, 22, 0, 7); c.arc(x + 42, y, 17, 0, 7); c.fill(); });
   // 山丘
   c.fillStyle = '#c9efb9'; c.beginPath(); c.moveTo(0, ge.gy); for (let x = 0; x <= W; x += 10) c.lineTo(x, ge.gy - 40 - Math.sin(x / W * Math.PI * 2 + .6) * 22); c.lineTo(W, ge.gy); c.fill();
-  // 車道線
-  c.save(); c.setLineDash([6, 12]); c.strokeStyle = 'rgba(120,170,220,.35)'; c.lineWidth = 2; for (let k = 1; k < ge.n; k++){ c.beginPath(); c.moveTo(k * ge.lw, 0); c.lineTo(k * ge.lw, ge.gy - 10); c.stroke(); } c.restore();
   // 地面
   c.fillStyle = '#8fd67f'; c.fillRect(0, ge.gy, W, H - ge.gy); c.fillStyle = '#a6e394'; c.fillRect(0, ge.gy, W, 6);
   for (let x = 14; x < W; x += 46){ c.fillStyle = ['#ff8fb8', '#ffe066', '#fff'][Math.round(x / 46) % 3]; c.beginPath(); c.arc(x, ge.gy + 14, 3.5, 0, 7); c.fill(); }
+  dinoMountain(c, ge, g, -1); dinoMountain(c, ge, g, 1);
   // 字泡泡
   g.words.forEach(w => dinoWord(c, w, ge, g));
   // 恐龍
   const jx = g.zap > 0 ? Math.sin(g.t * 90) * 4 : 0;
-  drawDino(c, g.dx + jx, ge.gy + 4, ge.ds, g.face, Math.max(g.mouth || 0, g.chomp), g.mood, g.t);
+  c.save(); c.translate(g.dx + jx, ge.gy + 4); c.rotate(Math.max(-1, Math.min(1, g.vx / ge.vmax)) * .1);
+  drawDino(c, 0, 0, ge.ds, g.face, Math.max(g.mouth || 0, g.chomp), g.mood, g.t); c.restore();
   if (g.zap > 0) dinoZap(c, g.dx + jx, ge.gy + 4 - ge.ds * .5, ge.ds, g.t, g.zap / .5);
   g.hearts.forEach(h => { c.globalAlpha = Math.max(0, Math.min(1, h.life)); c.font = '22px ' + G_FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('💖', h.x, h.y); }); c.globalAlpha = 1;
 }
@@ -2540,20 +2566,34 @@ function dinoZap(c, x, y, ds, t, k){   // 電到了：黃色閃電＋光暈＋�
   c.font = `900 ${Math.round(ds * .26)}px ${G_FONT}`; c.textAlign = 'center'; c.fillStyle = '#e6a800'; c.strokeStyle = '#fff'; c.lineWidth = 5; c.strokeText('ZAP!', x, y - ds * .85); c.fillText('ZAP!', x, y - ds * .85);
   c.restore();
 }
+
 function dinoWord(c, w, ge, g){
-  const x = (w.lane + .5) * ge.lw + Math.sin(g.t * 1.6 + w.wob) * 3, y = w.y;
-  const fs = fitFont(c, w.w, ge.lw - 26, Math.round(Math.max(16, Math.min(24, ge.lw * .16))), 11);
-  const tw = c.measureText(w.w).width; const bw = Math.min(ge.lw - 8, tw + 30), bh = 40 + (fs > 20 ? 4 : 0);
+  const x = w.x + Math.sin(g.t * 1.6 + w.wob) * 3, y = w.y;
+  const fs = fitFont(c, w.w, w.bw - 26, DINO_FS(ge), 11);
+  const bw = w.bw, bh = 40 + (fs > 20 ? 4 : 0);
   c.save(); c.globalAlpha = Math.max(0, Math.min(1, w.a));
-  if (w.glow > 0){ c.fillStyle = `rgba(95,211,168,${.3 + .3 * Math.abs(Math.sin(g.t * 5))})`; rrect(c, x - bw / 2 - 8, y - bh / 2 - 8, bw + 16, bh + 16, 24); c.fill(); }
   c.fillStyle = '#7cc56f'; c.beginPath(); c.ellipse(x + 8, y - bh / 2 - 3, 9, 5, -.5, 0, 7); c.fill(); c.strokeStyle = '#6a8f4c'; c.lineWidth = 2; c.beginPath(); c.moveTo(x, y - bh / 2 + 2); c.lineTo(x + 2, y - bh / 2 - 6); c.stroke();
   c.fillStyle = 'rgba(0,0,0,.08)'; rrect(c, x - bw / 2 + 2, y - bh / 2 + 4, bw, bh, 18); c.fill();
-  if (w.gold){ const hg = c.createRadialGradient(x, y, 6, x, y, bw * .75); hg.addColorStop(0, 'rgba(255,214,64,.9)'); hg.addColorStop(1, 'rgba(255,214,64,0)'); c.fillStyle = hg; c.beginPath(); c.arc(x, y, bw * .8, 0, 7); c.fill(); }
-  c.fillStyle = w.glow > 0 ? '#dff8ee' : w.gold ? '#ffe680' : w.col; rrect(c, x - bw / 2, y - bh / 2, bw, bh, 18); c.fill();
-  c.strokeStyle = w.glow > 0 ? '#2fb380' : w.gold ? '#ffb000' : '#fff'; c.lineWidth = 3; c.stroke();
+  c.fillStyle = w.col; rrect(c, x - bw / 2, y - bh / 2, bw, bh, 18); c.fill();
+  c.strokeStyle = '#fff'; c.lineWidth = 3; c.stroke();
   c.fillStyle = 'rgba(255,255,255,.7)'; c.beginPath(); c.ellipse(x - bw / 2 + 12, y - bh / 2 + 9, 5, 3, -.5, 0, 7); c.fill();
   c.font = `800 ${fs}px ${G_FONT}`; c.fillStyle = '#3b3350'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(w.w, x, y + 1);
-  if (w.gold) gSparkles(c, x, y, bw * .55, g.t);
+  c.restore();
+}
+function dinoMountain(c, ge, g, side){   // 可愛的小山：圓圓的山頂＋雪帽＋臉，side = -1 左邊／1 右邊
+  const W = g.W, mw = ge.mw, gy = ge.gy, h = Math.min(g.H * .5, mw * 3.2); const bx = side < 0 ? 0 : W; const ix = side < 0 ? mw + 6 : W - mw - 6;   // 山的內側腳
+  c.save();
+  const gr = c.createLinearGradient(0, gy - h, 0, gy); gr.addColorStop(0, '#9b86d6'); gr.addColorStop(1, '#7bbf8a');
+  c.fillStyle = gr; c.beginPath(); c.moveTo(bx, gy + 2); c.lineTo(bx, gy - h * .85); c.quadraticCurveTo(bx + side * -mw * .15, gy - h - 6, bx - side * mw * .55, gy - h);
+  c.quadraticCurveTo(bx - side * mw * .85, gy - h, ix, gy + 2); c.closePath(); c.fill();
+  c.strokeStyle = '#fff'; c.lineWidth = 3; c.stroke();
+  // 雪帽
+  c.fillStyle = '#fff'; c.beginPath(); const px = bx - side * mw * .55, py = gy - h; c.moveTo(px - mw * .38, py + h * .2); c.quadraticCurveTo(px - mw * .1, py - 3, px, py - 2); c.quadraticCurveTo(px + mw * .1, py - 3, px + mw * .38, py + h * .2);
+  c.lineTo(px + mw * .2, py + h * .15); c.lineTo(px + mw * .08, py + h * .24); c.lineTo(px - mw * .06, py + h * .15); c.lineTo(px - mw * .2, py + h * .25); c.closePath(); c.fill();
+  // 臉
+  const fx = px, fy = gy - h * .42, fr = Math.max(3, mw * .06); c.fillStyle = '#4a3d7a'; c.beginPath(); c.arc(fx - mw * .17, fy, fr, 0, 7); c.arc(fx + mw * .17, fy, fr, 0, 7); c.fill();
+  c.strokeStyle = '#4a3d7a'; c.lineWidth = 2; c.beginPath(); c.arc(fx, fy + fr * .5, mw * .08, .2, Math.PI - .2); c.stroke();
+  c.fillStyle = 'rgba(255,120,150,.55)'; c.beginPath(); c.ellipse(fx - mw * .3, fy + fr * 1.8, mw * .07, mw * .04, 0, 0, 7); c.ellipse(fx + mw * .3, fy + fr * 1.8, mw * .07, mw * .04, 0, 0, 7); c.fill();
   c.restore();
 }
 function drawDino(c, x, gy, s, face, open, mood, t){
@@ -2592,7 +2632,7 @@ function drawDino(c, x, gy, s, face, open, mood, t){
 
 /* ---- 測試用小掛勾 ---- */
 window.__game = {
-  get(){ const g = G; if (!g) return {kind: null, last: G_LAST}; const it = g.items[g.i] || {}; return {kind: g.kind, t: g.t, i: g.i, n: g.items.length, score: g.score, right: g.right, answer: it.answer, w: it.w, mode: it.mode, opts: it.opts, angle: g.angle, charge: g.charge, charging: !!g.charging, lock: !!g.lock, paused: !!g.paused, reveal: g.reveal, lane: g.lane, nl: g.nl, correctLane: (g.words || []).filter(w => w.ok).map(w => w.lane)[0], targets: (g.targets || []).map(t => ({w: t.w, ok: t.ok, x: t.x, y: t.y, face: t.face, sink: t.sink, dead: !!t.dead, kind: t.kind, gold: !!t.gold})), shots: (g.shots || []).length, W: g.W, H: g.H, combo: g.combo, maxCombo: g.maxCombo, spd: g.spd, bd: g.bd, gold: !!it.gold, decoy: !!it.decoy, words: (g.words || []).map(w => ({w: w.w, y: w.y, lane: w.lane, ok: w.ok, gold: !!w.gold, rel: w.rel, good: w.good, bad: w.bad, state: w.state})), zap: g.zap, phase: g.rd && g.rd.phase, T: g.rd && g.rd.T, rt: g.rd && g.rd.t, ri: g.ri, nr: g.rounds && g.rounds.length, target: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].target, dmode: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].mode, mcd: g.mcd, stats: g.stats, goldTargets: (g.targets || g.words || []).filter(t => t.gold).map(t => ({w: t.w, ok: t.ok})), last: G_LAST}; },
+  get(){ const g = G; if (!g) return {kind: null, last: G_LAST}; const it = g.items[g.i] || {}; return {kind: g.kind, t: g.t, i: g.i, n: g.items.length, score: g.score, right: g.right, answer: it.answer, w: it.w, mode: it.mode, opts: it.opts, angle: g.angle, charge: g.charge, charging: !!g.charging, lock: !!g.lock, paused: !!g.paused, reveal: g.reveal, dx: g.dx, vx: g.vx, wall: g.wall, geo: g.kind === 'dino' ? dinoGeom() : null, targets: (g.targets || []).map(t => ({w: t.w, ok: t.ok, x: t.x, y: t.y, face: t.face, sink: t.sink, dead: !!t.dead, kind: t.kind, gold: !!t.gold})), shots: (g.shots || []).length, W: g.W, H: g.H, combo: g.combo, maxCombo: g.maxCombo, spd: g.spd, bd: g.bd, gold: !!it.gold, decoy: !!it.decoy, words: (g.words || []).map(w => ({w: w.w, y: w.y, x: w.x, bw: w.bw, ok: w.ok, gold: !!w.gold, rel: w.rel, good: w.good, bad: w.bad, state: w.state})), zap: g.zap, phase: g.rd && g.rd.phase, T: g.rd && g.rd.T, rt: g.rd && g.rd.t, ri: g.ri, nr: g.rounds && g.rounds.length, target: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].target, dmode: g.rounds && g.rounds[g.ri] && g.rounds[g.ri].mode, mcd: g.mcd, stats: g.stats, goldTargets: (g.targets || g.words || []).filter(t => t.gold).map(t => ({w: t.w, ok: t.ok})), last: G_LAST}; },
   freeze(on){ if (G) G.freeze = on !== false; },
   speed(m){ if (G) G.speedMul = m; },
   aimAt(k){ const g = G; if (!g || !g.targets) return; const t = k == null ? g.targets.find(x => x.ok) : g.targets[k]; const ge = ninjaGeom(); g.angle = Math.atan2(t.x - ge.lx, (ge.ly - 12) - t.y); return g.angle; },
