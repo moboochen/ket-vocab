@@ -1833,12 +1833,15 @@ const GAMES = {ket: ['🎯', 'KET 題型'], spell: ['✍️', '英文填字'], n
 state.game = LS.get('vocabGame', 'ket'); if (!GAMES[state.game]) state.game = 'ket';
 /* ---- 遊戲設定：題數（10～50）、速度（忍者／恐龍，5 級）— 都存在 localStorage ---- */
 const COUNTS = [10, 20, 30, 40, 50];
-const SPEEDS = [['很慢', .5], ['慢', .7], ['普通', 1], ['快', 1.45], ['很快', 2]];
+const SPEEDS = [['¼ 速', .125], ['½ 速', .25], ['很慢', .5], ['慢', .7], ['普通', 1], ['快', 1.45], ['很快', 2]];
+const SPD0 = 2;   // v10：最前面加了 ¼ 速、½ 速；GS.speed 存的是相對「很慢」的位置（-2～4），舊的設定值不用轉換
+const SPK = k => SPEEDS[(k | 0) + SPD0];
+const METEORS = [['開', 1], ['少一點', 2], ['關', 0]];   // 流星雨（加分時間）：照原本／間隔加倍／沒有
 const TIMES = [30, 60, 120];                       // 恐龍／忍者：遊戲時間（秒）
 const DENS = [['少', '少少的'], ['中', '中等'], ['多', '很多']];   // 恐龍：同時掉下來的字多不多
 const BANKNS = [500, 1000, 3000];                  // 恐龍／忍者：字池大小（排名題庫的前 N 個字，最簡單的先）
 /* ---- 偏好設定與 Cookie 同意：按「允許」→ 設定＋匿名隨機編號存進 Cookie（localStorage 當備份）；「不允許」→ 只在這次開著的時候有效（sessionStorage） ---- */
-const PCK = 'ketv_prefs', UCK = 'ketv_uid', PREFKEYS = ['count', 'speed', 'time', 'dens', 'bankN'];
+const PCK = 'ketv_prefs', UCK = 'ketv_uid', PREFKEYS = ['count', 'speed', 'time', 'dens', 'bankN', 'met'];
 const CK = {
   get(n){ try{ const m = document.cookie.match(new RegExp('(?:^|; )' + n + '=([^;]*)')); return m ? decodeURIComponent(m[1]) : null; }catch(e){ return null; } },
   set(n, v){ try{ document.cookie = n + '=' + encodeURIComponent(v) + '; max-age=31536000; path=/; SameSite=Lax' + (location.protocol === 'https:' ? '; Secure' : ''); }catch(e){} },
@@ -1854,11 +1857,11 @@ function prefLoad(){
   if (!o && PREF.consent !== 'no') o = {count: LS.get('vocabGCount', null), speed: LS.get('vocabGSpeed', null), time: LS.get('vocabGTime', null), dens: LS.get('vocabGDens', null), bankN: LS.get('vocabGBankN', null)};
   return o || {};
 }
-const GS = {count: 10, speed: 1, time: 60, dens: 1, bankN: 1000};   // 預設值（面板一開始就選好）
+const GS = {count: 10, speed: 1, time: 60, dens: 1, bankN: 1000, met: 0};   // 預設值（面板一開始就選好）
 const GS_DEF = Object.assign({}, GS);
 function gsApply(o){ o = o || {};
-  if (COUNTS.includes(+o.count)) GS.count = +o.count; if (o.speed != null && +o.speed >= 0 && +o.speed <= 4) GS.speed = +o.speed | 0;
-  if (TIMES.includes(+o.time)) GS.time = +o.time; if (o.dens != null && +o.dens >= 0 && +o.dens <= 2) GS.dens = +o.dens | 0; if (BANKNS.includes(+o.bankN)) GS.bankN = +o.bankN; }
+  if (COUNTS.includes(+o.count)) GS.count = +o.count; if (o.speed != null && +o.speed >= -SPD0 && +o.speed <= 4) GS.speed = +o.speed | 0;
+  if (TIMES.includes(+o.time)) GS.time = +o.time; if (o.dens != null && +o.dens >= 0 && +o.dens <= 2) GS.dens = +o.dens | 0; if (BANKNS.includes(+o.bankN)) GS.bankN = +o.bankN; if (o.met != null && +o.met >= 0 && +o.met <= 2) GS.met = +o.met | 0; }
 gsApply(prefLoad());
 function prefSave(){
   const o = {}; PREFKEYS.forEach(k => o[k] = GS[k]);
@@ -1882,21 +1885,23 @@ function ckBarInit(){
 }
 ckBarInit();
 document.addEventListener('click', e => { if (e.target.closest('#ckReset')){ PREF.consent = null; LS.set('vocabConsent', null); try{ localStorage.removeItem('vocabConsent'); }catch(_){} ckBarUpdate(); } });
-function gSpd(){ return SPEEDS[GS.speed][1]; }
+function gSpd(){ return SPK(GS.speed)[1]; }
+function gSetMet(k){ if (k >= 0 && k <= 2){ GS.met = k | 0; prefSave(); } }
 function gSetCount(n){ if (COUNTS.includes(n)){ GS.count = n; prefSave(); } }
 function gSetTime(n){ if (TIMES.includes(n)){ GS.time = n; prefSave(); } }
 function gSetDens(k){ if (k >= 0 && k <= 2){ GS.dens = k | 0; prefSave(); } }
 function gSetBankN(n){ if (BANKNS.includes(n)){ GS.bankN = n; prefSave(); } }
-function gSetSpeed(k){ if (k >= 0 && k <= 4){ GS.speed = k | 0; prefSave(); } }
+function gSetSpeed(k){ if (k >= -SPD0 && k <= 4){ GS.speed = k | 0; prefSave(); } }
 const GTIMED = {dino: 1, ninja: 1};   // 限時的遊戲
 function gSettingsHTML(){
   if (state.game === 'ket') return '';
   const sp = state.game === 'ninja' || state.game === 'dino', tm = !!GTIMED[state.game];
-  const grp = (cls, lab, ic, arr, cur, attr, fmt) => `<div class="gsgrp ${cls}" role="group" aria-label="${lab}"><span class="qbl">${ic} ${lab}<\/span>${arr.map((v, k) => `<button class="chip${cur(v, k) ? ' on' : ''}" data-${attr}="${attr === 'gs' || attr === 'gd' ? k : v}" aria-pressed="${cur(v, k)}">${fmt(v, k)}<\/button>`).join('')}<\/div>`;
+  const grp = (cls, lab, ic, arr, cur, attr, fmt) => `<div class="gsgrp ${cls}" role="group" aria-label="${lab}"><span class="qbl">${ic} ${lab}<\/span>${arr.map((v, k) => `<button class="chip${cur(v, k) ? ' on' : ''}" data-${attr}="${attr === 'gs' ? k - SPD0 : attr === 'gd' || attr === 'gm' ? k : v}" aria-pressed="${cur(v, k)}">${fmt(v, k)}<\/button>`).join('')}<\/div>`;
   return `<div class="gset" id="gSet">
     ${tm ? grp('gtime', '時間', '⏱', TIMES, v => v === GS.time, 'gt', v => v + ' 秒') : grp('gcount', '題數', '📝', COUNTS, v => v === GS.count, 'gc', v => v)}
-    ${sp ? grp('gspeed', '難度／速度', '⚡', SPEEDS, (v, k) => k === GS.speed, 'gs', v => v[0]) : ''}
+    ${sp ? grp('gspeed', '難度／速度', '⚡', SPEEDS, (v, k) => k - SPD0 === GS.speed, 'gs', v => v[0]) : ''}
     ${tm ? grp('gdens', '字的數量', '🍃', DENS, (v, k) => k === GS.dens, 'gd', v => v[0]) : ''}
+    ${tm ? grp('gmet', '流星雨', '☄️', METEORS, (v, k) => k === GS.met, 'gm', v => v[0]) : ''}
     ${tm ? grp('gbankn', '字池', '📚', BANKNS, v => v === GS.bankN, 'gn', v => v.toLocaleString() + ' 字') : ''}
   <\/div>`;
 }
@@ -1933,8 +1938,8 @@ $('#quizView').addEventListener('change', e => {
 function pickGame(k){ if (!GAMES[k]) return; state.game = k; LS.set('vocabGame', k); gUnlockAudio(); openQuiz(); }
 function openQuiz(){ stopGame(); if (state.game === 'ket') newQuestion(); else if (GTIMED[state.game]) gShowSetup(state.game); else startGame(state.game); }
 $('#quizView').addEventListener('click', e => { const b = e.target.closest('[data-game]'); if (b) pickGame(b.dataset.game);
-  const gx = e.target.closest('[data-gc],[data-gs],[data-gt],[data-gd],[data-gn]');
-  if (gx){ const d = gx.dataset; if (d.gc != null) gSetCount(+d.gc); else if (d.gs != null) gSetSpeed(+d.gs); else if (d.gt != null) gSetTime(+d.gt); else if (d.gd != null) gSetDens(+d.gd); else gSetBankN(+d.gn);
+  const gx = e.target.closest('[data-gc],[data-gs],[data-gt],[data-gd],[data-gm],[data-gn]');
+  if (gx){ const d = gx.dataset; if (d.gc != null) gSetCount(+d.gc); else if (d.gs != null) gSetSpeed(+d.gs); else if (d.gt != null) gSetTime(+d.gt); else if (d.gd != null) gSetDens(+d.gd); else if (d.gm != null) gSetMet(+d.gm); else gSetBankN(+d.gn);
     const sel = Object.keys(d).map(k => `[data-${k}="${d[k]}"]`)[0]; if (GTIMED[state.game]) gShowSetup(state.game, true); else openQuiz(); const f = $(sel); if (f) try{ f.focus({preventScroll: true}); }catch(_){} }
   const q = e.target.closest('[data-qd]'); if (q && !q.disabled){ setDiff(QB.diff + (+q.dataset.qd)); openQuiz(); const f = $('#' + q.id); if (f && !f.disabled) try{ f.focus({preventScroll: true}); }catch(_){} } });
 
@@ -2105,7 +2110,7 @@ function gSetupHTML(kind){
   return `<div class="card gsetup" id="gSetup" data-gkind="${kind}">
     <div class="gsu-head"><span class="gsu-ic">${ic}<\/span><div><div class="gsu-t">${name}<\/div><div class="gsu-s">${rules}<\/div><\/div><\/div>
     ${gSettingsHTML()}
-    <div class="gsu-saved" id="gSaved">⚙️ 目前選擇：<b>${SPEEDS[GS.speed][0]}<\/b>・<b>${GS.time} 秒<\/b>・<b>${GS.bankN.toLocaleString()} 字<\/b>・字的數量<b>${DENS[GS.dens][0]}<\/b>　${sv}<\/div>
+    <div class="gsu-saved" id="gSaved">⚙️ 目前選擇：<b>${SPK(GS.speed)[0]}<\/b>・<b>${GS.time} 秒<\/b>・<b>${GS.bankN.toLocaleString()} 字<\/b>・字的數量<b>${DENS[GS.dens][0]}<\/b>・流星雨<b>${METEORS[GS.met][0]}<\/b>　${sv}<\/div>
     <button class="gstart" id="gStart" aria-label="開始遊戲"><span class="gsp">▶<\/span> START <small>開始！<\/small><\/button>
   <\/div>`;
 }
@@ -2654,7 +2659,10 @@ function bonusPlanNinja(L, rnd){
   else { starts = []; for (let k = 0; k * 30 < L; k++) starts.push(30 * k + (k ? u(10, 20) : u(15, 20))); }
   return starts.map(t => ({s: t, e: t + D, d: D}));
 }
-const bonusPlan = (L, rnd, kind) => kind === 'ninja' ? bonusPlanNinja(L, rnd) : bonusPlanDino(L, rnd);
+// v10 流星雨設定：開＝原本的時間表；少一點＝每次加分時間之間的間隔加倍（放不下的就不出現）；關＝沒有加分時間
+function bonusThin(pl, L, f){ if (!f) return []; if (f === 1 || !pl.length) return pl; const s0 = pl[0].s, out = [];
+  for (const b of pl){ const s = s0 + (b.s - s0) * f; if (s + b.d <= L - .5) out.push({s, e: s + b.d, d: b.d}); } return out; }
+const bonusPlan = (L, rnd, kind, met) => bonusThin(kind === 'ninja' ? bonusPlanNinja(L, rnd) : bonusPlanDino(L, rnd), L, METEORS[met == null ? GS.met : met][1]);
 function bonusInit(g){ const bp = bonusPlan(g.limit, null, g.kind); Object.assign(g, {bplan: bp, bidx: 0, bonus: false, bn: 0, bsp: 2, bonusTotal: bp.length, bonusDone: 0, meteors: [], bmults: [], bend: 0}); }
 function bonusMult(){ return Math.round((1.5 + Math.random() * .5) * 10) / 10; }   // 1.5～2.0
 function bonusStart(g){
@@ -2774,8 +2782,8 @@ function dinoGeomOf(W, H, k, bonus){
 }
 function dinoGeom(){ return dinoGeomOf(G.W, G.H, GS.speed, G.bonus); }
 // 每一級掉落速度都是原本的 3 倍；恐龍最大水平速度也跟著等級變快，每一級都躲得掉
-function dinoFallV(H, k, bonus, mul){ return H / 11 * SPEEDS[k][1] * 3 * (bonus ? 2 : 1) * (mul || 1); }
-function dinoVmaxOf(W, k, bonus){ return W * .66 * Math.pow(SPEEDS[k][1] / .7, .7) * (bonus ? 1.25 : 1); }
+function dinoFallV(H, k, bonus, mul){ return H / 11 * SPK(k)[1] * 3 * (bonus ? 2 : 1) * (mul || 1); }
+function dinoVmaxOf(W, k, bonus){ const m = SPK(k)[1]; return W * .66 * (m >= .5 ? Math.pow(m / .7, .7) : Math.pow(.5 / .7, .7) * Math.pow(m / .5, .35)) * (bonus ? 1.25 : 1); }   // ¼／½ 速：恐龍不要慢到走不動
 function dinoV(){ return dinoFallV(G.H, GS.speed, G.bonus, G.speedMul); }
 let DINO_MC = null;
 function dinoTextW(text, fs){ DINO_MC = DINO_MC || document.createElement('canvas').getContext('2d'); DINO_MC.font = `800 ${fs}px ${G_FONT}`; return DINO_MC.measureText(text).width; }
@@ -3099,7 +3107,7 @@ window.__game = {
   skipIntro: () => { const g = G; if (g && g.rd && g.rd.phase === 'intro'){ g.rd.pt = 0; } },
   skipRound: () => dinoSkipRound(),
   endNow: () => { if (G) gEnd(); },
-  bonusPlanOf: L => bonusPlan(L), ninjaPlanOf: L => bonusPlan(L, null, 'ninja'),
+  bonusPlanOf: (L, met) => bonusPlan(L, null, 'dino', met), ninjaPlanOf: (L, met) => bonusPlan(L, null, 'ninja', met),
   noBonus: on => { const g = G; if (!g) return; if (on !== false){ if (!g._plan) g._plan = g.bplan; g.bplan = []; } else if (g._plan){ g.bplan = g._plan; g._plan = null; } },
   toBonus: () => { const g = G; if (g && g._plan){ g.bplan = g._plan; g._plan = null; } if (g && g.bplan[g.bidx]) g.left = g.limit - g.bplan[g.bidx].s - .05; },
   setLeft: n => { if (G) G.left = n; },
@@ -3110,7 +3118,7 @@ window.__game = {
   last: () => G_LAST,
   toSetup: () => { if (GTIMED[state.game]) gShowSetup(state.game, true); },
   prefs: () => ({consent: PREF.consent, uid: PREF.uid, cookie: document.cookie, ls: LS.get('vocabPrefs', null), lsUid: LS.get('vocabUid', null), ss: SS.get('vocabPrefsS')}),
-  settings: () => ({count: GS.count, speed: GS.speed, time: GS.time, dens: GS.dens, bankN: GS.bankN}),
+  settings: () => ({count: GS.count, speed: GS.speed, time: GS.time, dens: GS.dens, bankN: GS.bankN, met: GS.met}),
   bankInfo: n => { const pn = k => { const o = GS.bankN; GS.bankN = k; try{ return gamePool(); } finally { GS.bankN = o; } }; const T = pn(n), T5 = pn(500), T1 = pn(1000); const sc = T.list.reduce((a, w) => a + wordScore(w), 0) / T.list.length; const tg = dinoPool().filter(x => T.set.has(x.w)).length; return {n: T.list.length, avg: sc, list: n === 500 ? T.list : [], nested: n === 500 ? T.list.every(w => T1.set.has(w)) : n === 1000 ? T.list.every(w => pn(3000).set.has(w)) : true, targets: tg}; },
   flipBelt: () => { if (G) G.bflip = 0; },
   items: () => G ? G.items.map(it => ({w: it.w, answer: it.answer, mode: it.mode, zh: it.zh, opts: it.opts, rel: it.rel, round: it.round, zh: it.zh})) : []
