@@ -2865,7 +2865,7 @@ function dinoSearch(ge, k0, tau, minIv, vf, gen, rnd, prev, chk){
    出字規劃：一個「影子恐龍」用 75% 的最高速度、比遊戲小一點的加速度、同一個跳躍弧線，在時間軸上找一條路：
    吃到「所有」對的字、不碰任何錯的字或不相關的字。新的一排字出現後，影子要等 0.25 秒（人的反應時間）才能改路線。
    找不到路 → 這排字換位置／換高度重來，或晚一點再出。 */
-const D_PLAN = false; const DJ_T = 2 / 3, DJ_H = 1.35, D_PDT = 1 / 15, D_PNV = 2, D_REACT = .25, D_PSP = .75;
+const D_PLAN = true; const DJ_T = 2 / 3, DJ_H = 1.35, D_PDT = 1 / 15, D_PNV = 2, D_REACT = .25, D_PSP = .75;
 function dinoJumpY(ge, jt){ if (jt == null || jt <= 0 || jt >= DJ_T) return 0; const u = jt / DJ_T; return 4 * ge.jh * u * (1 - u); }
 function dinoHitTest(ge, dx, jy, w){   // 遊戲、規劃器、測試共用的碰撞規則
   if (!(Math.abs(dx - w.x) < ge.hw + w.bw / 2 - 6)) return false; const b = w.y + ge.ih / 2, t = w.y - ge.ih / 2; return b >= ge.hitTop - jy && t <= ge.hitBot - jy;
