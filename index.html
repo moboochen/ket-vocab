@@ -3100,13 +3100,13 @@ function dinoMakeRound(g, mode0){
   let cand = pool.filter(x => !g.taken.has(x.w) && !recent.has(x.w));
   if (cand.length < 3) cand = pool.filter(x => !g.taken.has(x.w));
   if (!cand.length){ g.taken.clear(); cand = pool.slice(); }
-  cand = shuffle(cand); let p = cand.find(x => okm(x, m));
+  cand = shuffle(cand); let p = cand.find(x => dinoSingles(x, m).length >= (m === 'syn' ? 5 : 4)) || cand.find(x => okm(x, m));
   if (!p){ m = m === 'syn' ? 'ant' : 'syn'; p = cand.find(x => okm(x, m)) || cand[0]; }
   g.taken.add(p.w); cefrRemember(lv, p.w); const other = m === 'syn' ? 'ant' : 'syn';
   const zh = (mm, w) => p[mm].get(w) || D.zhOf[w] || gZh(w);
   const ent = (mm, w, r) => ({w, zh: zh(mm, w), rel: r});
   // 不相關的字：同一級和低一級的 CEFR 字（難度相近），不夠再用字池補
-  const words = [...new Set(D.filter(e => e.li === li || e.li === li - 1).flatMap(e => [e.w, ...e.syn.keys(), ...e.ant.keys()]))].filter(x => /^[a-z]+$/.test(x) && x.length <= 12);
+  const words = [...new Set(D.filter(e => e.li === li || e.li === li - 1).flatMap(e => [e.w, ...e.syn.keys(), ...e.ant.keys()]))].filter(x => /^[a-z]{4,12}$/.test(x) && !FUNC_WORDS.has(x));
   const none = []; for (const x of shuffle(words)){ if (none.length >= 60) break; if (cefrSafe(x, p)) none.push({w: x, zh: D.zhOf[x] || gZh(x), rel: 'none'}); }
   if (none.length < 20){ if (!g.fills) g.fills = shuffle(dinoTop().list.filter(x => x.length <= 9 && gContentOk(x))); for (const x of g.fills){ if (none.length >= 60) break; if (none.some(n => n.w === x) || !cefrSafe(x, p)) continue; none.push({w: x, zh: gZh(x), rel: 'none'}); } }
   const all = mm => [...p[mm].keys()].map(w => ({w, zh: zh(mm, w)}));
